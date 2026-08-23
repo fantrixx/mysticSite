@@ -114,55 +114,66 @@ body {
 }
 
 .brand h1 {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: clamp(0.35em, 2.4vw, 0.85em);
   font-weight: 300;
-  font-size: clamp(2.75rem, 12vw, 7.5rem);
-  letter-spacing: 0.42em;
-  text-indent: 0.42em;
+  font-size: clamp(2.4rem, 11vw, 6.8rem);
+  letter-spacing: 0;
+  text-indent: 0;
   text-transform: lowercase;
   color: var(--bone);
   opacity: 0;
-  will-change: transform, opacity;
-  transform: translate3d(0, 0, 0) rotate(0deg);
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
   animation: reveal 3.2s ease 0.4s forwards;
+}
+
+.brand h1 .letter {
+  display: inline-block;
+  will-change: transform, opacity;
   text-shadow:
     0 0 50px rgba(140, 180, 200, 0.12),
     0 22px 40px rgba(0, 0, 0, 0.55);
+  animation: letter-in 2.8s ease calc(0.55s + var(--i) * 0.08s) both;
 }
 
 .brand h1.is-floating {
   animation: none;
-  opacity: 0.9;
+  opacity: 1;
+}
+
+.brand h1.is-floating .letter {
+  animation: none;
 }
 
 @keyframes reveal {
   from {
     opacity: 0;
-    letter-spacing: 0.55em;
     filter: blur(6px);
   }
   to {
-    opacity: 0.9;
-    letter-spacing: 0.42em;
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes letter-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 0.88;
+    transform: translate3d(0, 0, 0);
     filter: blur(0);
   }
 }
 
 @media (max-width: 480px) {
   .brand h1 {
-    letter-spacing: 0.28em;
-    text-indent: 0.28em;
-  }
-
-  @keyframes reveal {
-    from {
-      opacity: 0;
-      letter-spacing: 0.4em;
-      filter: blur(6px);
-    }
-    to {
-      opacity: 0.9;
-      letter-spacing: 0.28em;
-      filter: blur(0);
-    }
+    gap: clamp(0.22em, 3.2vw, 0.45em);
   }
 }

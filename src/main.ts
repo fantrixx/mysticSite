@@ -7,7 +7,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     <div class="vignette"></div>
   </div>
   <main class="brand">
-    <h1 id="mark">fantrixx</h1>
+    <h1 id="mark" aria-label="fantrixx"></h1>
   </main>
 `;
 
@@ -33,6 +33,15 @@ const canvas = document.querySelector<HTMLCanvasElement>("#water")!;
 const ctx = canvas.getContext("2d")!;
 const mark = document.querySelector<HTMLHeadingElement>("#mark")!;
 
+const letters = "fantrixx".split("").map((ch, i) => {
+  const span = document.createElement("span");
+  span.className = "letter";
+  span.textContent = ch;
+  span.style.setProperty("--i", String(i));
+  mark.appendChild(span);
+  return span;
+});
+
 let width = 0;
 let height = 0;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -52,20 +61,25 @@ function updateFloat(now: number) {
   if (!floating) return;
 
   const t = now * 0.001;
-  const x =
-    Math.sin(t * 0.35) * 14 +
-    Math.sin(t * 0.71 + 1.2) * 7 +
-    Math.sin(t * 1.15 + 0.4) * 3;
-  const y =
-    Math.sin(t * 0.48 + 0.6) * 10 +
-    Math.sin(t * 0.93 + 2.1) * 5 +
-    Math.cos(t * 1.4) * 2.5;
-  const rot = Math.sin(t * 0.42) * 1.6 + Math.sin(t * 0.88 + 1.7) * 0.9;
-  const opacity =
-    0.84 + Math.sin(t * 0.55) * 0.06 + Math.sin(t * 1.1 + 0.8) * 0.03;
+  const groupX = Math.sin(t * 0.22) * 6 + Math.sin(t * 0.41 + 0.8) * 3;
+  const groupY = Math.sin(t * 0.28 + 0.4) * 5 + Math.cos(t * 0.37) * 2.5;
 
-  mark.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg)`;
-  mark.style.opacity = opacity.toFixed(3);
+  mark.style.transform = `translate3d(${groupX.toFixed(2)}px, ${groupY.toFixed(2)}px, 0)`;
+
+  letters.forEach((letter, i) => {
+    const phase = i * 0.55;
+    const x = Math.sin(t * 0.55 + phase) * 2.2 + Math.sin(t * 1.05 + phase * 1.3) * 1.1;
+    const y =
+      Math.sin(t * 0.62 + phase * 0.9) * 5.5 +
+      Math.sin(t * 1.15 + phase) * 2.4 +
+      Math.cos(t * 0.48 + i * 0.35) * 1.6;
+    const rot = Math.sin(t * 0.5 + phase) * 2.4 + Math.sin(t * 0.9 + phase * 1.1) * 1.2;
+    const opacity =
+      0.78 + Math.sin(t * 0.45 + phase) * 0.08 + Math.sin(t * 0.9 + i) * 0.03;
+
+    letter.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg)`;
+    letter.style.opacity = opacity.toFixed(3);
+  });
 }
 
 window.setTimeout(() => {
@@ -86,38 +100,36 @@ function resize() {
 
 function spawnTrail(x: number, y: number, dx: number, dy: number, now: number) {
   const speed = Math.hypot(dx, dy);
-  if (speed < 0.8) return;
-  if (now - lastSpawn < 28) return;
+  if (speed < 1.6) return;
+  if (now - lastSpawn < 70) return;
   lastSpawn = now;
 
-  const strength = Math.min(1, speed / 32);
+  const strength = Math.min(0.7, speed / 48);
   ripples.push({
     x,
     y,
-    r: 6 + strength * 8,
-    max: 55 + strength * 70,
+    r: 4 + strength * 4,
+    max: 36 + strength * 28,
     life: 1,
     strength,
   });
 
-  const nx = -dy / (speed || 1);
-  const ny = dx / (speed || 1);
-  const count = 1 + Math.floor(strength * 2);
-
-  for (let i = 0; i < count; i++) {
-    const side = i % 2 === 0 ? 1 : -1;
+  if (Math.random() < 0.35) {
+    const nx = -dy / (speed || 1);
+    const ny = dx / (speed || 1);
+    const side = Math.random() < 0.5 ? 1 : -1;
     wakes.push({
-      x: x + nx * side * (6 + Math.random() * 12),
-      y: y + ny * side * (6 + Math.random() * 12),
-      vx: nx * side * (0.15 + Math.random() * 0.55) - dx * 0.015,
-      vy: ny * side * (0.15 + Math.random() * 0.55) - dy * 0.015,
-      life: 0.45 + Math.random() * 0.4,
-      size: 1.4 + Math.random() * 2.2 * strength,
+      x: x + nx * side * (4 + Math.random() * 8),
+      y: y + ny * side * (4 + Math.random() * 8),
+      vx: nx * side * (0.06 + Math.random() * 0.2) - dx * 0.006,
+      vy: ny * side * (0.06 + Math.random() * 0.2) - dy * 0.006,
+      life: 0.5 + Math.random() * 0.35,
+      size: 0.8 + Math.random() * 1.2 * strength,
     });
   }
 
-  if (ripples.length > 22) ripples.splice(0, ripples.length - 22);
-  if (wakes.length > 70) wakes.splice(0, wakes.length - 70);
+  if (ripples.length > 10) ripples.splice(0, ripples.length - 10);
+  if (wakes.length > 18) wakes.splice(0, wakes.length - 18);
 }
 
 function onPointer(e: PointerEvent) {
@@ -238,7 +250,7 @@ function drawOcean(now: number) {
 }
 
 function drawInteraction() {
-  // finger highlight under pointer
+  // very soft finger pressure on the surface
   if (pointerActive) {
     const glow = ctx.createRadialGradient(
       pointerX,
@@ -246,14 +258,14 @@ function drawInteraction() {
       0,
       pointerX,
       pointerY,
-      48,
+      36,
     );
-    glow.addColorStop(0, "rgba(190, 220, 235, 0.16)");
-    glow.addColorStop(0.35, "rgba(90, 150, 170, 0.07)");
+    glow.addColorStop(0, "rgba(160, 190, 205, 0.035)");
+    glow.addColorStop(0.5, "rgba(70, 110, 130, 0.015)");
     glow.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(pointerX, pointerY, 48, 0, Math.PI * 2);
+    ctx.arc(pointerX, pointerY, 36, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -262,19 +274,19 @@ function drawInteraction() {
 
   for (let i = ripples.length - 1; i >= 0; i--) {
     const r = ripples[i];
-    r.r += 1.2 + r.strength * 1.1;
-    r.life -= 0.016 + r.strength * 0.006;
+    r.r += 0.35 + r.strength * 0.25;
+    r.life -= 0.008 + r.strength * 0.003;
 
     if (r.life <= 0 || r.r > r.max) {
       ripples.splice(i, 1);
       continue;
     }
 
-    const alpha = r.life * (0.14 + r.strength * 0.16);
-    ctx.strokeStyle = `rgba(175, 210, 225, ${alpha})`;
-    ctx.lineWidth = 1 + r.strength;
+    const alpha = r.life * (0.035 + r.strength * 0.04);
+    ctx.strokeStyle = `rgba(160, 195, 210, ${alpha})`;
+    ctx.lineWidth = 0.7;
     ctx.beginPath();
-    ctx.ellipse(r.x, r.y, r.r, r.r * 0.52, 0, 0, Math.PI * 2);
+    ctx.ellipse(r.x, r.y, r.r, r.r * 0.48, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
 
@@ -282,21 +294,21 @@ function drawInteraction() {
     const w = wakes[i];
     w.x += w.vx;
     w.y += w.vy;
-    w.vx *= 0.97;
-    w.vy *= 0.97;
-    w.life -= 0.018;
+    w.vx *= 0.985;
+    w.vy *= 0.985;
+    w.life -= 0.01;
 
     if (w.life <= 0) {
       wakes.splice(i, 1);
       continue;
     }
 
-    const g = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, w.size * 4);
-    g.addColorStop(0, `rgba(200, 230, 240, ${0.22 * w.life})`);
+    const g = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, w.size * 5);
+    g.addColorStop(0, `rgba(170, 200, 215, ${0.05 * w.life})`);
     g.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(w.x, w.y, w.size * 4, 0, Math.PI * 2);
+    ctx.arc(w.x, w.y, w.size * 5, 0, Math.PI * 2);
     ctx.fill();
   }
 
