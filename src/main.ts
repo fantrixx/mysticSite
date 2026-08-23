@@ -42,6 +42,26 @@ const letters = "fantrixx".split("").map((ch, i) => {
   return span;
 });
 
+type LetterMotion = {
+  el: HTMLSpanElement;
+  pushX: number;
+  pushY: number;
+  velX: number;
+  velY: number;
+  lastHit: number;
+  touching: boolean;
+};
+
+const letterMotion: LetterMotion[] = letters.map((el) => ({
+  el,
+  pushX: 0,
+  pushY: 0,
+  velX: 0,
+  velY: 0,
+  lastHit: 0,
+  touching: false,
+}));
+
 let width = 0;
 let height = 0;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -57,28 +77,110 @@ let prevY = -9999;
 let pointerActive = false;
 let lastSpawn = 0;
 
+const RETURN_DELAY_MS = 650;
+const HIT_PADDING = 18;
+
+function interactLetters(now: number) {
+  for (const m of letterMotion) {
+    const rect = m.el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = cx - pointerX;
+    const dy = cy - pointerY;
+    const reachX = rect.width * 0.5 + HIT_PADDING;
+    const reachY = rect.height * 0.5 + HIT_PADDING;
+    const near =
+      pointerActive &&
+      Math.abs(dx) <= reachX &&
+      Math.abs(dy) <= reachY;
+
+    if (near) {
+      // Push away from the side the pointer touches
+      let nx = dx;
+      let ny = dy;
+      const dist = Math.hypot(nx, ny) || 1;
+      nx /= dist;
+      ny /= dist;
+
+      // Prefer the stronger contact axis so corner hits feel directional
+      const ax = Math.abs(dx) / reachX;
+      const ay = Math.abs(dy) / reachY;
+      if (ax > ay * 1.15) ny *= 0.35;
+      else if (ay > ax * 1.15) nx *= 0.35;
+
+      const force = 0.55 + (1 - Math.min(1, dist / Math.max(reachX, reachY))) * 0.9;
+      m.velX += nx * force * 1.8;
+      m.velY += ny * force * 1.8;
+      m.lastHit = now;
+      m.touching = true;
+    } else {
+      m.touching = false;
+    }
+
+    // Drift with current velocity
+    m.pushX += m.velX;
+    m.pushY += m.velY;
+    m.velX *= 0.9;
+    m.velY *= 0.9;
+
+    // Cap how far a letter can wander
+    const maxPush = 42;
+    const pushDist = Math.hypot(m.pushX, m.pushY);
+    if (pushDist > maxPush) {
+      m.pushX = (m.pushX / pushDist) * maxPush;
+      m.pushY = (m.pushY / pushDist) * maxPush;
+    }
+
+    // After a short pause, gently drift home
+    if (!m.touching && now - m.lastHit > RETURN_DELAY_MS) {
+      m.velX += -m.pushX * 0.045;
+      m.velY += -m.pushY * 0.045;
+      m.pushX *= 0.965;
+      m.pushY *= 0.965;
+      if (Math.abs(m.pushX) < 0.15) m.pushX = 0;
+      if (Math.abs(m.pushY) < 0.15) m.pushY = 0;
+    }
+  }
+}
+
 function updateFloat(now: number) {
-  if (!floating) return;
+  interactLetters(now);
 
   const t = now * 0.001;
-  const groupX = Math.sin(t * 0.22) * 6 + Math.sin(t * 0.41 + 0.8) * 3;
-  const groupY = Math.sin(t * 0.28 + 0.4) * 5 + Math.cos(t * 0.37) * 2.5;
+  const groupX = floating
+    ? Math.sin(t * 0.22) * 6 + Math.sin(t * 0.41 + 0.8) * 3
+    : 0;
+  const groupY = floating
+    ? Math.sin(t * 0.28 + 0.4) * 5 + Math.cos(t * 0.37) * 2.5
+    : 0;
 
   mark.style.transform = `translate3d(${groupX.toFixed(2)}px, ${groupY.toFixed(2)}px, 0)`;
 
-  letters.forEach((letter, i) => {
+  letterMotion.forEach((m, i) => {
     const phase = i * 0.55;
-    const x = Math.sin(t * 0.55 + phase) * 2.2 + Math.sin(t * 1.05 + phase * 1.3) * 1.1;
-    const y =
-      Math.sin(t * 0.62 + phase * 0.9) * 5.5 +
-      Math.sin(t * 1.15 + phase) * 2.4 +
-      Math.cos(t * 0.48 + i * 0.35) * 1.6;
-    const rot = Math.sin(t * 0.5 + phase) * 2.4 + Math.sin(t * 0.9 + phase * 1.1) * 1.2;
-    const opacity =
-      0.78 + Math.sin(t * 0.45 + phase) * 0.08 + Math.sin(t * 0.9 + i) * 0.03;
+    const driftX = floating
+      ? Math.sin(t * 0.55 + phase) * 2.2 + Math.sin(t * 1.05 + phase * 1.3) * 1.1
+      : 0;
+    const driftY = floating
+      ? Math.sin(t * 0.62 + phase * 0.9) * 5.5 +
+        Math.sin(t * 1.15 + phase) * 2.4 +
+        Math.cos(t * 0.48 + i * 0.35) * 1.6
+      : 0;
+    const driftRot = floating
+      ? Math.sin(t * 0.5 + phase) * 2.4 + Math.sin(t * 0.9 + phase * 1.1) * 1.2
+      : 0;
 
-    letter.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg)`;
-    letter.style.opacity = opacity.toFixed(3);
+    const x = driftX + m.pushX;
+    const y = driftY + m.pushY;
+    const rot = driftRot + m.pushX * 0.08 - m.pushY * 0.05;
+    const opacity = floating
+      ? 0.78 + Math.sin(t * 0.45 + phase) * 0.08 + Math.sin(t * 0.9 + i) * 0.03
+      : Number(m.el.style.opacity) || 0.88;
+
+    if (floating || m.pushX !== 0 || m.pushY !== 0) {
+      m.el.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg)`;
+    }
+    if (floating) m.el.style.opacity = opacity.toFixed(3);
   });
 }
 
