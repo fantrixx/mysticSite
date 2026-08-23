@@ -86,38 +86,38 @@ function resize() {
 
 function spawnTrail(x: number, y: number, dx: number, dy: number, now: number) {
   const speed = Math.hypot(dx, dy);
-  if (speed < 0.4) return;
-  if (now - lastSpawn < 16) return;
+  if (speed < 0.8) return;
+  if (now - lastSpawn < 28) return;
   lastSpawn = now;
 
-  const strength = Math.min(1, speed / 28);
+  const strength = Math.min(1, speed / 32);
   ripples.push({
     x,
     y,
-    r: 4 + strength * 6,
-    max: 70 + strength * 90,
+    r: 6 + strength * 8,
+    max: 55 + strength * 70,
     life: 1,
     strength,
   });
 
   const nx = -dy / (speed || 1);
   const ny = dx / (speed || 1);
-  const count = 2 + Math.floor(strength * 4);
+  const count = 1 + Math.floor(strength * 2);
 
   for (let i = 0; i < count; i++) {
     const side = i % 2 === 0 ? 1 : -1;
     wakes.push({
-      x: x + nx * side * (4 + Math.random() * 10),
-      y: y + ny * side * (4 + Math.random() * 10),
-      vx: nx * side * (0.2 + Math.random() * 0.8) - dx * 0.02,
-      vy: ny * side * (0.2 + Math.random() * 0.8) - dy * 0.02,
-      life: 0.55 + Math.random() * 0.45,
-      size: 1.2 + Math.random() * 2.8 * strength,
+      x: x + nx * side * (6 + Math.random() * 12),
+      y: y + ny * side * (6 + Math.random() * 12),
+      vx: nx * side * (0.15 + Math.random() * 0.55) - dx * 0.015,
+      vy: ny * side * (0.15 + Math.random() * 0.55) - dy * 0.015,
+      life: 0.45 + Math.random() * 0.4,
+      size: 1.4 + Math.random() * 2.2 * strength,
     });
   }
 
-  if (ripples.length > 40) ripples.splice(0, ripples.length - 40);
-  if (wakes.length > 120) wakes.splice(0, wakes.length - 120);
+  if (ripples.length > 22) ripples.splice(0, ripples.length - 22);
+  if (wakes.length > 70) wakes.splice(0, wakes.length - 70);
 }
 
 function onPointer(e: PointerEvent) {
@@ -169,28 +169,42 @@ function drawOcean(now: number) {
   ctx.fillRect(0, 0, width, height);
 
   // rolling dark swell bands
-  for (let band = 0; band < 7; band++) {
-    const yBase = height * (0.18 + band * 0.12);
-    const amp = 10 + band * 3.5;
-    const speed = 0.18 + band * 0.05;
+  for (let band = 0; band < 8; band++) {
+    const yBase = height * (0.14 + band * 0.11);
+    const amp = 14 + band * 4.5;
+    const speed = 0.16 + band * 0.045;
     const phase = band * 1.3;
 
     ctx.beginPath();
     ctx.moveTo(0, height);
-    for (let x = 0; x <= width; x += 12) {
+    for (let x = 0; x <= width; x += 10) {
       const y =
         yBase +
-        Math.sin(x * 0.0045 + t * speed + phase) * amp +
-        Math.sin(x * 0.011 + t * speed * 1.4 + phase) * (amp * 0.35);
+        Math.sin(x * 0.0042 + t * speed + phase) * amp +
+        Math.sin(x * 0.01 + t * speed * 1.35 + phase) * (amp * 0.4);
       if (x === 0) ctx.lineTo(0, y);
       else ctx.lineTo(x, y);
     }
     ctx.lineTo(width, height);
     ctx.closePath();
 
-    const depth = 0.04 + band * 0.018;
-    ctx.fillStyle = `rgba(${8 + band * 2}, ${28 + band * 4}, ${38 + band * 5}, ${depth})`;
+    const depth = 0.055 + band * 0.022;
+    ctx.fillStyle = `rgba(${6 + band * 2}, ${24 + band * 5}, ${34 + band * 6}, ${depth})`;
     ctx.fill();
+
+    // crest highlight
+    ctx.beginPath();
+    for (let x = 0; x <= width; x += 14) {
+      const y =
+        yBase +
+        Math.sin(x * 0.0042 + t * speed + phase) * amp +
+        Math.sin(x * 0.01 + t * speed * 1.35 + phase) * (amp * 0.4);
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = `rgba(140, 180, 200, ${0.025 + band * 0.004})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 
   // surface shimmer / caustics
@@ -248,29 +262,20 @@ function drawInteraction() {
 
   for (let i = ripples.length - 1; i >= 0; i--) {
     const r = ripples[i];
-    r.r += 1.6 + r.strength * 1.4;
-    r.life -= 0.012 + r.strength * 0.004;
+    r.r += 1.2 + r.strength * 1.1;
+    r.life -= 0.016 + r.strength * 0.006;
 
     if (r.life <= 0 || r.r > r.max) {
       ripples.splice(i, 1);
       continue;
     }
 
-    const alpha = r.life * (0.18 + r.strength * 0.22);
-    ctx.strokeStyle = `rgba(180, 215, 230, ${alpha})`;
-    ctx.lineWidth = 1.2 + r.strength * 1.4;
+    const alpha = r.life * (0.14 + r.strength * 0.16);
+    ctx.strokeStyle = `rgba(175, 210, 225, ${alpha})`;
+    ctx.lineWidth = 1 + r.strength;
     ctx.beginPath();
-    ctx.ellipse(r.x, r.y, r.r, r.r * 0.55, 0, 0, Math.PI * 2);
+    ctx.ellipse(r.x, r.y, r.r, r.r * 0.52, 0, 0, Math.PI * 2);
     ctx.stroke();
-
-    // inner secondary ring
-    if (r.r > 18) {
-      ctx.strokeStyle = `rgba(140, 190, 210, ${alpha * 0.45})`;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.ellipse(r.x, r.y, r.r * 0.62, r.r * 0.34, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
   }
 
   for (let i = wakes.length - 1; i >= 0; i--) {
