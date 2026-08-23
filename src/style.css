@@ -123,10 +123,17 @@ body {
   text-transform: lowercase;
   color: var(--bone);
   opacity: 0;
-  animation:
-    reveal 3.2s ease 0.4s forwards,
-    breath 7s ease-in-out 3.6s infinite;
-  text-shadow: 0 0 40px rgba(180, 190, 200, 0.08);
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0) rotate(0deg);
+  animation: reveal 3.2s ease 0.4s forwards;
+  text-shadow:
+    0 0 40px rgba(180, 190, 200, 0.08),
+    0 18px 36px rgba(0, 0, 0, 0.45);
+}
+
+.brand h1.is-floating {
+  animation: none;
+  opacity: 0.9;
 }
 
 @keyframes reveal {
@@ -136,19 +143,9 @@ body {
     filter: blur(6px);
   }
   to {
-    opacity: 0.92;
+    opacity: 0.9;
     letter-spacing: 0.42em;
     filter: blur(0);
-  }
-}
-
-@keyframes breath {
-  0%,
-  100% {
-    opacity: 0.82;
-  }
-  50% {
-    opacity: 0.98;
   }
 }
 
@@ -165,7 +162,7 @@ body {
       filter: blur(6px);
     }
     to {
-      opacity: 0.92;
+      opacity: 0.9;
       letter-spacing: 0.28em;
       filter: blur(0);
     }

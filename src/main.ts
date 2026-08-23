@@ -7,7 +7,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     <div class="vignette"></div>
   </div>
   <main class="brand">
-    <h1>fantrixx</h1>
+    <h1 id="mark">fantrixx</h1>
   </main>
 `;
 
@@ -23,11 +23,43 @@ type Particle = {
 
 const canvas = document.querySelector<HTMLCanvasElement>("#fog")!;
 const ctx = canvas.getContext("2d")!;
+const mark = document.querySelector<HTMLHeadingElement>("#mark")!;
 
 let width = 0;
 let height = 0;
 let particles: Particle[] = [];
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
+let floating = false;
+
+// Soft water drift: layered sines for bob, sway, and tilt
+function updateFloat(now: number) {
+  if (!floating) return;
+
+  const t = now * 0.001;
+  const x =
+    Math.sin(t * 0.35) * 14 +
+    Math.sin(t * 0.71 + 1.2) * 7 +
+    Math.sin(t * 1.15 + 0.4) * 3;
+  const y =
+    Math.sin(t * 0.48 + 0.6) * 10 +
+    Math.sin(t * 0.93 + 2.1) * 5 +
+    Math.cos(t * 1.4) * 2.5;
+  const rot =
+    Math.sin(t * 0.42) * 1.6 +
+    Math.sin(t * 0.88 + 1.7) * 0.9;
+  const opacity =
+    0.84 +
+    Math.sin(t * 0.55) * 0.06 +
+    Math.sin(t * 1.1 + 0.8) * 0.03;
+
+  mark.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg)`;
+  mark.style.opacity = opacity.toFixed(3);
+}
+
+window.setTimeout(() => {
+  floating = true;
+  mark.classList.add("is-floating");
+}, 3600);
 
 function resize() {
   width = window.innerWidth;
@@ -58,11 +90,12 @@ function seedParticles() {
   particles = Array.from({ length: count }, () => makeParticle(true));
 }
 
-function tick() {
+function tick(now: number) {
+  updateFloat(now);
   ctx.clearRect(0, 0, width, height);
 
   // soft drifting haze bands
-  const t = performance.now() * 0.00008;
+  const t = now * 0.00008;
   for (let i = 0; i < 3; i++) {
     const gx = width * (0.25 + 0.25 * i) + Math.sin(t + i) * width * 0.12;
     const gy = height * (0.35 + Math.cos(t * 0.7 + i) * 0.18);
@@ -75,7 +108,7 @@ function tick() {
   }
 
   for (const p of particles) {
-    p.x += p.vx + Math.sin(performance.now() * 0.0003 + p.y * 0.01) * 0.12;
+    p.x += p.vx + Math.sin(now * 0.0003 + p.y * 0.01) * 0.12;
     p.y += p.vy;
     p.life -= 0.0008;
 
