@@ -21,12 +21,14 @@ npm run build
 
 Die gebauten Dateien landen direkt im Repository-Root:
 
-- `index.html`
-- `assets/` (JS/CSS)
-- `favicon.svg` (aus `public/`)
+- `index.html` — fertige Seite
+- `assets/` — JS/CSS
+- `favicon.svg`
+
+Die Quell-HTML für die Entwicklung bleibt in `index.source.html`.
 
 ```bash
 npm run preview
 ```
 
-startet eine Vorschau der Root-Build-Ausgabe.
+serviert die Root-Build-Ausgabe lokal.

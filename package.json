@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node scripts/publish-to-root.mjs",
-    "preview": "vite preview"
+    "preview": "npx --yes serve -l 43127 ."
   },
   "devDependencies": {
     "typescript": "~6.0.2",
