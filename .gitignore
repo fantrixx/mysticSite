@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Build output lives in the repo root (index.html, assets/);
+# keep source entry separate for development.
+# Uncomment the next lines if you do not want built files in git:
+# /index.html
+# /assets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
