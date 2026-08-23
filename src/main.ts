@@ -48,6 +48,8 @@ type LetterMotion = {
   pushY: number;
   velX: number;
   velY: number;
+  spin: number;
+  spinVel: number;
   lastHit: number;
   touching: boolean;
 };
@@ -58,6 +60,8 @@ const letterMotion: LetterMotion[] = letters.map((el) => ({
   pushY: 0,
   velX: 0,
   velY: 0,
+  spin: 0,
+  spinVel: 0,
   lastHit: 0,
   touching: false,
 }));
@@ -76,11 +80,20 @@ let prevX = -9999;
 let prevY = -9999;
 let pointerActive = false;
 let lastSpawn = 0;
+let pointerDeltaX = 0;
+let pointerDeltaY = 0;
 
-const RETURN_DELAY_MS = 650;
-const HIT_PADDING = 18;
+const RETURN_DELAY_MS = 1100;
+const HIT_PADDING = 22;
 
 function interactLetters(now: number) {
+  const moveX = pointerDeltaX;
+  const moveY = pointerDeltaY;
+  const moveSpeed = Math.hypot(moveX, moveY);
+  // Consume swipe impulse once so leaves get a shove, not a continuous force
+  pointerDeltaX = 0;
+  pointerDeltaY = 0;
+
   for (const m of letterMotion) {
     const rect = m.el.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
@@ -94,51 +107,75 @@ function interactLetters(now: number) {
       Math.abs(dx) <= reachX &&
       Math.abs(dy) <= reachY;
 
-    if (near) {
-      // Push away from the side the pointer touches
-      let nx = dx;
-      let ny = dy;
-      const dist = Math.hypot(nx, ny) || 1;
-      nx /= dist;
-      ny /= dist;
+    if (near && moveSpeed > 0.35) {
+      // Shove like a finger sweeping a leaf across the water surface
+      const mx = moveX / moveSpeed;
+      const my = moveY / moveSpeed;
 
-      // Prefer the stronger contact axis so corner hits feel directional
-      const ax = Math.abs(dx) / reachX;
-      const ay = Math.abs(dy) / reachY;
-      if (ax > ay * 1.15) ny *= 0.35;
-      else if (ay > ax * 1.15) nx *= 0.35;
+      // Blend swipe direction with contact side so approach angle matters
+      let sx = dx;
+      let sy = dy;
+      const sideDist = Math.hypot(sx, sy) || 1;
+      sx /= sideDist;
+      sy /= sideDist;
 
-      const force = 0.55 + (1 - Math.min(1, dist / Math.max(reachX, reachY))) * 0.9;
-      m.velX += nx * force * 1.8;
-      m.velY += ny * force * 1.8;
+      const shoveX = mx * 0.78 + sx * 0.22;
+      const shoveY = my * 0.78 + sy * 0.22;
+      const shoveLen = Math.hypot(shoveX, shoveY) || 1;
+      const nx = shoveX / shoveLen;
+      const ny = shoveY / shoveLen;
+
+      const force = Math.min(2.4, 0.35 + moveSpeed * 0.085);
+      m.velX += nx * force;
+      m.velY += ny * force;
+
+      // Leaf spin from glancing contact
+      const torque = (nx * dy - ny * dx) * 0.012 + (moveX * 0.02 - moveY * 0.01);
+      m.spinVel += torque;
+
       m.lastHit = now;
       m.touching = true;
     } else {
       m.touching = false;
     }
 
-    // Drift with current velocity
+    // Glide on the surface with soft water drag
     m.pushX += m.velX;
     m.pushY += m.velY;
-    m.velX *= 0.9;
-    m.velY *= 0.9;
+    m.spin += m.spinVel;
+    m.velX *= 0.978;
+    m.velY *= 0.978;
+    m.spinVel *= 0.972;
 
-    // Cap how far a letter can wander
-    const maxPush = 42;
+    // Tiny cross-current wobble while still sliding
+    if (Math.hypot(m.velX, m.velY) > 0.08) {
+      const wobble = now * 0.001;
+      m.velX += Math.sin(wobble * 2.1 + m.pushY * 0.04) * 0.012;
+      m.velY += Math.cos(wobble * 1.7 + m.pushX * 0.04) * 0.01;
+    }
+
+    const maxPush = 78;
     const pushDist = Math.hypot(m.pushX, m.pushY);
     if (pushDist > maxPush) {
       m.pushX = (m.pushX / pushDist) * maxPush;
       m.pushY = (m.pushY / pushDist) * maxPush;
+      m.velX *= 0.92;
+      m.velY *= 0.92;
     }
 
-    // After a short pause, gently drift home
+    m.spin = Math.max(-18, Math.min(18, m.spin));
+
+    // After a pause, the current slowly draws the leaf home
     if (!m.touching && now - m.lastHit > RETURN_DELAY_MS) {
-      m.velX += -m.pushX * 0.045;
-      m.velY += -m.pushY * 0.045;
-      m.pushX *= 0.965;
-      m.pushY *= 0.965;
-      if (Math.abs(m.pushX) < 0.15) m.pushX = 0;
-      if (Math.abs(m.pushY) < 0.15) m.pushY = 0;
+      m.velX += -m.pushX * 0.012;
+      m.velY += -m.pushY * 0.012;
+      m.spinVel += -m.spin * 0.01;
+      m.pushX *= 0.988;
+      m.pushY *= 0.988;
+      m.spin *= 0.986;
+      if (Math.abs(m.pushX) < 0.2) m.pushX = 0;
+      if (Math.abs(m.pushY) < 0.2) m.pushY = 0;
+      if (Math.abs(m.spin) < 0.15) m.spin = 0;
     }
   }
 }
@@ -172,12 +209,18 @@ function updateFloat(now: number) {
 
     const x = driftX + m.pushX;
     const y = driftY + m.pushY;
-    const rot = driftRot + m.pushX * 0.08 - m.pushY * 0.05;
+    const rot =
+      driftRot +
+      m.spin +
+      m.velX * 0.35 -
+      m.velY * 0.2 +
+      m.pushX * 0.03 -
+      m.pushY * 0.02;
     const opacity = floating
       ? 0.78 + Math.sin(t * 0.45 + phase) * 0.08 + Math.sin(t * 0.9 + i) * 0.03
       : Number(m.el.style.opacity) || 0.88;
 
-    if (floating || m.pushX !== 0 || m.pushY !== 0) {
+    if (floating || m.pushX !== 0 || m.pushY !== 0 || m.spin !== 0) {
       m.el.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg)`;
     }
     if (floating) m.el.style.opacity = opacity.toFixed(3);
@@ -239,11 +282,15 @@ function onPointer(e: PointerEvent) {
   const y = e.clientY;
 
   if (pointerActive) {
-    spawnTrail(x, y, x - prevX, y - prevY, performance.now());
+    const dx = x - prevX;
+    const dy = y - prevY;
+    spawnTrail(x, y, dx, dy, performance.now());
+    pointerDeltaX += dx;
+    pointerDeltaY += dy;
   }
 
-  prevX = pointerX;
-  prevY = pointerY;
+  prevX = pointerX === -9999 ? x : pointerX;
+  prevY = pointerY === -9999 ? y : pointerY;
   pointerX = x;
   pointerY = y;
   pointerActive = true;
@@ -253,6 +300,8 @@ function onPointerLeave() {
   pointerActive = false;
   pointerX = -9999;
   pointerY = -9999;
+  pointerDeltaX = 0;
+  pointerDeltaY = 0;
 }
 
 function drawOcean(now: number) {
