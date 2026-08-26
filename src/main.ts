@@ -68,6 +68,8 @@ type LetterMotion = {
   spinVel: number;
   lastHit: number;
   touching: boolean;
+  glitchUntil: number;
+  glitchSeed: number;
 };
 
 const letterMotion: LetterMotion[] = letters.map((el) => ({
@@ -80,12 +82,15 @@ const letterMotion: LetterMotion[] = letters.map((el) => ({
   spinVel: 0,
   lastHit: 0,
   touching: false,
+  glitchUntil: 0,
+  glitchSeed: Math.random() * 1000,
 }));
 
 let width = 0;
 let height = 0;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
 let floating = false;
+let nextGlitchAt = 0;
 
 const ripples: Ripple[] = [];
 const wakes: Wake[] = [];
@@ -99,8 +104,8 @@ let lastSpawn = 0;
 let pointerDeltaX = 0;
 let pointerDeltaY = 0;
 
-const RETURN_DELAY_MS = 1100;
-const HIT_PADDING = 22;
+const RETURN_DELAY_MS = 280;
+const HIT_PADDING = 6;
 
 function interactLetters(now: number) {
   const moveX = pointerDeltaX;
@@ -123,30 +128,29 @@ function interactLetters(now: number) {
       Math.abs(dx) <= reachX &&
       Math.abs(dy) <= reachY;
 
-    if (near && moveSpeed > 0.35) {
-      // Shove like a finger sweeping a leaf across the water surface
+    if (near && moveSpeed > 0.9) {
+      // Soft nudge — barely more than the ambient float
       const mx = moveX / moveSpeed;
       const my = moveY / moveSpeed;
 
-      // Blend swipe direction with contact side so approach angle matters
       let sx = dx;
       let sy = dy;
       const sideDist = Math.hypot(sx, sy) || 1;
       sx /= sideDist;
       sy /= sideDist;
 
-      const shoveX = mx * 0.78 + sx * 0.22;
-      const shoveY = my * 0.78 + sy * 0.22;
+      const shoveX = mx * 0.7 + sx * 0.3;
+      const shoveY = my * 0.7 + sy * 0.3;
       const shoveLen = Math.hypot(shoveX, shoveY) || 1;
       const nx = shoveX / shoveLen;
       const ny = shoveY / shoveLen;
 
-      const force = Math.min(2.4, 0.35 + moveSpeed * 0.085);
+      const force = Math.min(0.22, 0.04 + moveSpeed * 0.008);
       m.velX += nx * force;
       m.velY += ny * force;
 
-      // Leaf spin from glancing contact
-      const torque = (nx * dy - ny * dx) * 0.012 + (moveX * 0.02 - moveY * 0.01);
+      const torque =
+        (nx * dy - ny * dx) * 0.0018 + (moveX * 0.003 - moveY * 0.0015);
       m.spinVel += torque;
 
       m.lastHit = now;
@@ -155,49 +159,130 @@ function interactLetters(now: number) {
       m.touching = false;
     }
 
-    // Glide on the surface with soft water drag
+    // Short glide with quick water drag
     m.pushX += m.velX;
     m.pushY += m.velY;
     m.spin += m.spinVel;
-    m.velX *= 0.978;
-    m.velY *= 0.978;
-    m.spinVel *= 0.972;
+    m.velX *= 0.94;
+    m.velY *= 0.94;
+    m.spinVel *= 0.93;
 
-    // Tiny cross-current wobble while still sliding
-    if (Math.hypot(m.velX, m.velY) > 0.08) {
+    if (Math.hypot(m.velX, m.velY) > 0.05) {
       const wobble = now * 0.001;
-      m.velX += Math.sin(wobble * 2.1 + m.pushY * 0.04) * 0.012;
-      m.velY += Math.cos(wobble * 1.7 + m.pushX * 0.04) * 0.01;
+      m.velX += Math.sin(wobble * 2.1 + m.pushY * 0.04) * 0.003;
+      m.velY += Math.cos(wobble * 1.7 + m.pushX * 0.04) * 0.0025;
     }
 
-    const maxPush = 78;
+    const maxPush = 10;
     const pushDist = Math.hypot(m.pushX, m.pushY);
     if (pushDist > maxPush) {
       m.pushX = (m.pushX / pushDist) * maxPush;
       m.pushY = (m.pushY / pushDist) * maxPush;
-      m.velX *= 0.92;
-      m.velY *= 0.92;
+      m.velX *= 0.85;
+      m.velY *= 0.85;
     }
 
-    m.spin = Math.max(-18, Math.min(18, m.spin));
+    m.spin = Math.max(-3.5, Math.min(3.5, m.spin));
 
-    // After a pause, the current slowly draws the leaf home
+    // Settle back quickly so the nudge stays fleeting
     if (!m.touching && now - m.lastHit > RETURN_DELAY_MS) {
-      m.velX += -m.pushX * 0.012;
-      m.velY += -m.pushY * 0.012;
-      m.spinVel += -m.spin * 0.01;
-      m.pushX *= 0.988;
-      m.pushY *= 0.988;
-      m.spin *= 0.986;
-      if (Math.abs(m.pushX) < 0.2) m.pushX = 0;
-      if (Math.abs(m.pushY) < 0.2) m.pushY = 0;
-      if (Math.abs(m.spin) < 0.15) m.spin = 0;
+      m.velX += -m.pushX * 0.028;
+      m.velY += -m.pushY * 0.028;
+      m.spinVel += -m.spin * 0.022;
+      m.pushX *= 0.965;
+      m.pushY *= 0.965;
+      m.spin *= 0.96;
+      if (Math.abs(m.pushX) < 0.12) m.pushX = 0;
+      if (Math.abs(m.pushY) < 0.12) m.pushY = 0;
+      if (Math.abs(m.spin) < 0.08) m.spin = 0;
     }
   }
 }
 
+function scheduleNextGlitch(now: number) {
+  // Sparse bursts — sometimes soon, sometimes a longer quiet stretch
+  nextGlitchAt = now + 1800 + Math.random() * 6500;
+}
+
+function triggerGlitchBurst(now: number) {
+  const count =
+    Math.random() < 0.45
+      ? 1
+      : 1 + Math.floor(Math.random() * letterMotion.length);
+  const indices = letterMotion.map((_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+
+  const duration = 90 + Math.random() * 280;
+  for (let n = 0; n < count; n++) {
+    const m = letterMotion[indices[n]];
+    m.glitchUntil = now + duration * (0.55 + Math.random() * 0.7);
+    m.glitchSeed = Math.random() * 1000;
+    m.el.classList.add("is-glitching");
+  }
+}
+
+function clearGlitch(m: LetterMotion) {
+  m.glitchUntil = 0;
+  m.el.classList.remove("is-glitching");
+  m.el.style.removeProperty("--gx");
+  m.el.style.removeProperty("--gy");
+  m.el.style.removeProperty("--gclip");
+  m.el.style.filter = "";
+}
+
+function updateGlitch(m: LetterMotion, now: number, baseOpacity: number) {
+  if (now >= m.glitchUntil) {
+    clearGlitch(m);
+    m.el.style.opacity = baseOpacity.toFixed(3);
+    return { x: 0, y: 0, rot: 0, skew: 0, opacity: baseOpacity };
+  }
+
+  // Broken-tape stutter: hold a frame, then jump
+  const tick = Math.floor(now / (28 + (m.glitchSeed % 17)));
+  const rnd = Math.sin(tick * 12.9898 + m.glitchSeed) * 43758.5453;
+  const n = rnd - Math.floor(rnd);
+  const hardCut = n > 0.72;
+  const tear = n > 0.88;
+
+  const gx = hardCut ? (n - 0.5) * 14 : (n - 0.5) * 3.5;
+  const gy = tear ? Math.sin(tick * 3.1 + m.glitchSeed) * 5 : (n - 0.5) * 1.2;
+  const skew = hardCut ? (n - 0.5) * 9 : (n - 0.5) * 1.5;
+  const clip = tear ? 35 + n * 45 : 100;
+  const opacity = hardCut
+    ? n > 0.92
+      ? 0.08
+      : 0.35 + n * 0.55
+    : baseOpacity * (0.55 + n * 0.5);
+
+  m.el.style.setProperty("--gx", `${gx.toFixed(2)}px`);
+  m.el.style.setProperty("--gy", `${gy.toFixed(2)}px`);
+  m.el.style.setProperty("--gclip", `${clip.toFixed(1)}%`);
+  m.el.style.filter = hardCut
+    ? `contrast(${1.2 + n * 0.9}) brightness(${0.75 + n * 0.7}) saturate(${1.4 + n})`
+    : "";
+
+  return {
+    x: gx * 0.35,
+    y: gy * 0.25,
+    rot: skew * 0.15,
+    skew,
+    opacity,
+  };
+}
+
 function updateFloat(now: number) {
   interactLetters(now);
+
+  if (floating) {
+    if (nextGlitchAt === 0) scheduleNextGlitch(now + 1200);
+    if (now >= nextGlitchAt) {
+      triggerGlitchBurst(now);
+      scheduleNextGlitch(now);
+    }
+  }
 
   const t = now * 0.001;
   const groupX = floating
@@ -223,23 +308,38 @@ function updateFloat(now: number) {
       ? Math.sin(t * 0.5 + phase) * 2.4 + Math.sin(t * 0.9 + phase * 1.1) * 1.2
       : 0;
 
-    const x = driftX + m.pushX;
-    const y = driftY + m.pushY;
-    const rot =
-      driftRot +
-      m.spin +
-      m.velX * 0.35 -
-      m.velY * 0.2 +
-      m.pushX * 0.03 -
-      m.pushY * 0.02;
-    const opacity = floating
+    const baseOpacity = floating
       ? 0.78 + Math.sin(t * 0.45 + phase) * 0.08 + Math.sin(t * 0.9 + i) * 0.03
       : Number(m.el.style.opacity) || 0.88;
 
-    if (floating || m.pushX !== 0 || m.pushY !== 0 || m.spin !== 0) {
-      m.el.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg)`;
+    const glitch =
+      m.glitchUntil > 0
+        ? updateGlitch(m, now, baseOpacity)
+        : { x: 0, y: 0, rot: 0, skew: 0, opacity: baseOpacity };
+
+    const x = driftX + m.pushX + glitch.x;
+    const y = driftY + m.pushY + glitch.y;
+    const rot =
+      driftRot +
+      m.spin +
+      m.velX * 0.12 -
+      m.velY * 0.08 +
+      m.pushX * 0.01 -
+      m.pushY * 0.008 +
+      glitch.rot;
+
+    if (
+      floating ||
+      m.pushX !== 0 ||
+      m.pushY !== 0 ||
+      m.spin !== 0 ||
+      m.glitchUntil > 0
+    ) {
+      m.el.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg) skewX(${glitch.skew.toFixed(2)}deg)`;
     }
-    if (floating) m.el.style.opacity = opacity.toFixed(3);
+    if (floating || m.glitchUntil > 0) {
+      m.el.style.opacity = glitch.opacity.toFixed(3);
+    }
   });
 }
 
