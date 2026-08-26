@@ -5,6 +5,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     <canvas id="water"></canvas>
     <div class="grain"></div>
     <div class="vignette"></div>
+    <div class="shock" id="shock"></div>
   </div>
   <main class="brand">
     <div class="brand-stack">
@@ -48,6 +49,8 @@ type Wake = {
 const canvas = document.querySelector<HTMLCanvasElement>("#water")!;
 const ctx = canvas.getContext("2d")!;
 const mark = document.querySelector<HTMLHeadingElement>("#mark")!;
+const scene = document.querySelector<HTMLDivElement>(".scene")!;
+const shockEl = document.querySelector<HTMLDivElement>("#shock")!;
 
 const letters = "fantrixx".split("").map((ch, i) => {
   const span = document.createElement("span");
@@ -60,28 +63,12 @@ const letters = "fantrixx".split("").map((ch, i) => {
 
 type LetterMotion = {
   el: HTMLSpanElement;
-  pushX: number;
-  pushY: number;
-  velX: number;
-  velY: number;
-  spin: number;
-  spinVel: number;
-  lastHit: number;
-  touching: boolean;
   glitchUntil: number;
   glitchSeed: number;
 };
 
 const letterMotion: LetterMotion[] = letters.map((el) => ({
   el,
-  pushX: 0,
-  pushY: 0,
-  velX: 0,
-  velY: 0,
-  spin: 0,
-  spinVel: 0,
-  lastHit: 0,
-  touching: false,
   glitchUntil: 0,
   glitchSeed: Math.random() * 1000,
 }));
@@ -91,6 +78,9 @@ let height = 0;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
 let floating = false;
 let nextGlitchAt = 0;
+let nextShockAt = 0;
+let shockUntil = 0;
+let shockSeed = 0;
 
 const ripples: Ripple[] = [];
 const wakes: Wake[] = [];
@@ -101,103 +91,6 @@ let prevX = -9999;
 let prevY = -9999;
 let pointerActive = false;
 let lastSpawn = 0;
-let pointerDeltaX = 0;
-let pointerDeltaY = 0;
-
-const RETURN_DELAY_MS = 280;
-const HIT_PADDING = 6;
-
-function interactLetters(now: number) {
-  const moveX = pointerDeltaX;
-  const moveY = pointerDeltaY;
-  const moveSpeed = Math.hypot(moveX, moveY);
-  // Consume swipe impulse once so leaves get a shove, not a continuous force
-  pointerDeltaX = 0;
-  pointerDeltaY = 0;
-
-  for (const m of letterMotion) {
-    const rect = m.el.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = cx - pointerX;
-    const dy = cy - pointerY;
-    const reachX = rect.width * 0.5 + HIT_PADDING;
-    const reachY = rect.height * 0.5 + HIT_PADDING;
-    const near =
-      pointerActive &&
-      Math.abs(dx) <= reachX &&
-      Math.abs(dy) <= reachY;
-
-    if (near && moveSpeed > 0.9) {
-      // Soft nudge — barely more than the ambient float
-      const mx = moveX / moveSpeed;
-      const my = moveY / moveSpeed;
-
-      let sx = dx;
-      let sy = dy;
-      const sideDist = Math.hypot(sx, sy) || 1;
-      sx /= sideDist;
-      sy /= sideDist;
-
-      const shoveX = mx * 0.7 + sx * 0.3;
-      const shoveY = my * 0.7 + sy * 0.3;
-      const shoveLen = Math.hypot(shoveX, shoveY) || 1;
-      const nx = shoveX / shoveLen;
-      const ny = shoveY / shoveLen;
-
-      const force = Math.min(0.22, 0.04 + moveSpeed * 0.008);
-      m.velX += nx * force;
-      m.velY += ny * force;
-
-      const torque =
-        (nx * dy - ny * dx) * 0.0018 + (moveX * 0.003 - moveY * 0.0015);
-      m.spinVel += torque;
-
-      m.lastHit = now;
-      m.touching = true;
-    } else {
-      m.touching = false;
-    }
-
-    // Short glide with quick water drag
-    m.pushX += m.velX;
-    m.pushY += m.velY;
-    m.spin += m.spinVel;
-    m.velX *= 0.94;
-    m.velY *= 0.94;
-    m.spinVel *= 0.93;
-
-    if (Math.hypot(m.velX, m.velY) > 0.05) {
-      const wobble = now * 0.001;
-      m.velX += Math.sin(wobble * 2.1 + m.pushY * 0.04) * 0.003;
-      m.velY += Math.cos(wobble * 1.7 + m.pushX * 0.04) * 0.0025;
-    }
-
-    const maxPush = 10;
-    const pushDist = Math.hypot(m.pushX, m.pushY);
-    if (pushDist > maxPush) {
-      m.pushX = (m.pushX / pushDist) * maxPush;
-      m.pushY = (m.pushY / pushDist) * maxPush;
-      m.velX *= 0.85;
-      m.velY *= 0.85;
-    }
-
-    m.spin = Math.max(-3.5, Math.min(3.5, m.spin));
-
-    // Settle back quickly so the nudge stays fleeting
-    if (!m.touching && now - m.lastHit > RETURN_DELAY_MS) {
-      m.velX += -m.pushX * 0.028;
-      m.velY += -m.pushY * 0.028;
-      m.spinVel += -m.spin * 0.022;
-      m.pushX *= 0.965;
-      m.pushY *= 0.965;
-      m.spin *= 0.96;
-      if (Math.abs(m.pushX) < 0.12) m.pushX = 0;
-      if (Math.abs(m.pushY) < 0.12) m.pushY = 0;
-      if (Math.abs(m.spin) < 0.08) m.spin = 0;
-    }
-  }
-}
 
 function scheduleNextGlitch(now: number) {
   // Sparse bursts — sometimes soon, sometimes a longer quiet stretch
@@ -273,70 +166,87 @@ function updateGlitch(m: LetterMotion, now: number, baseOpacity: number) {
   };
 }
 
-function updateFloat(now: number) {
-  interactLetters(now);
+function scheduleNextShock(now: number) {
+  nextShockAt = now + 4500 + Math.random() * 11000;
+}
 
+function triggerShock(now: number) {
+  shockSeed = Math.random() * 1000;
+  const double = Math.random() < 0.35;
+  shockUntil = now + (double ? 220 + Math.random() * 180 : 90 + Math.random() * 120);
+  scene.classList.add("is-shocking");
+  shockEl.classList.add("is-on");
+}
+
+function updateShock(now: number) {
+  if (shockUntil <= 0) {
+    scene.style.removeProperty("--sx");
+    scene.style.removeProperty("--sy");
+    scene.style.removeProperty("--srot");
+    return;
+  }
+
+  if (now >= shockUntil) {
+    shockUntil = 0;
+    scene.classList.remove("is-shocking");
+    shockEl.classList.remove("is-on");
+    shockEl.style.opacity = "0";
+    scene.style.removeProperty("--sx");
+    scene.style.removeProperty("--sy");
+    scene.style.removeProperty("--srot");
+    return;
+  }
+
+  const left = shockUntil - now;
+  const tick = Math.floor(now / 28);
+  const rnd = Math.sin(tick * 19.3 + shockSeed) * 43758.5453;
+  const n = rnd - Math.floor(rnd);
+  const hard = n > 0.55;
+
+  const sx = (n - 0.5) * (hard ? 18 : 6);
+  const sy = (Math.sin(tick * 4.2 + shockSeed) - 0.5) * (hard ? 12 : 4);
+  const srot = (n - 0.5) * (hard ? 1.2 : 0.35);
+  scene.style.setProperty("--sx", `${sx.toFixed(2)}px`);
+  scene.style.setProperty("--sy", `${sy.toFixed(2)}px`);
+  scene.style.setProperty("--srot", `${srot.toFixed(3)}deg`);
+
+  let flash = 0;
+  if (hard && left > 40) flash = 0.08 + n * 0.22;
+  if (n > 0.9) flash = 0.35 + n * 0.25;
+  if (n > 0.97) flash = 0.7;
+  shockEl.style.opacity = flash.toFixed(3);
+}
+
+function updateFloat(now: number) {
   if (floating) {
     if (nextGlitchAt === 0) scheduleNextGlitch(now + 1200);
     if (now >= nextGlitchAt) {
       triggerGlitchBurst(now);
       scheduleNextGlitch(now);
     }
+    if (nextShockAt === 0) scheduleNextShock(now + 2500);
+    if (now >= nextShockAt) {
+      triggerShock(now);
+      scheduleNextShock(now);
+    }
   }
 
-  const t = now * 0.001;
-  const groupX = floating
-    ? Math.sin(t * 0.22) * 6 + Math.sin(t * 0.41 + 0.8) * 3
-    : 0;
-  const groupY = floating
-    ? Math.sin(t * 0.28 + 0.4) * 5 + Math.cos(t * 0.37) * 2.5
-    : 0;
+  updateShock(now);
 
-  mark.style.transform = `translate3d(${groupX.toFixed(2)}px, ${groupY.toFixed(2)}px, 0)`;
-
-  letterMotion.forEach((m, i) => {
-    const phase = i * 0.55;
-    const driftX = floating
-      ? Math.sin(t * 0.55 + phase) * 2.2 + Math.sin(t * 1.05 + phase * 1.3) * 1.1
-      : 0;
-    const driftY = floating
-      ? Math.sin(t * 0.62 + phase * 0.9) * 5.5 +
-        Math.sin(t * 1.15 + phase) * 2.4 +
-        Math.cos(t * 0.48 + i * 0.35) * 1.6
-      : 0;
-    const driftRot = floating
-      ? Math.sin(t * 0.5 + phase) * 2.4 + Math.sin(t * 0.9 + phase * 1.1) * 1.2
-      : 0;
-
-    const baseOpacity = floating
-      ? 0.78 + Math.sin(t * 0.45 + phase) * 0.08 + Math.sin(t * 0.9 + i) * 0.03
-      : Number(m.el.style.opacity) || 0.88;
+  letterMotion.forEach((m) => {
+    const baseOpacity = floating ? 0.88 : Number(m.el.style.opacity) || 0.88;
 
     const glitch =
       m.glitchUntil > 0
         ? updateGlitch(m, now, baseOpacity)
         : { x: 0, y: 0, rot: 0, skew: 0, opacity: baseOpacity };
 
-    const x = driftX + m.pushX + glitch.x;
-    const y = driftY + m.pushY + glitch.y;
-    const rot =
-      driftRot +
-      m.spin +
-      m.velX * 0.12 -
-      m.velY * 0.08 +
-      m.pushX * 0.01 -
-      m.pushY * 0.008 +
-      glitch.rot;
-
-    if (
-      floating ||
-      m.pushX !== 0 ||
-      m.pushY !== 0 ||
-      m.spin !== 0 ||
-      m.glitchUntil > 0
-    ) {
-      m.el.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rot.toFixed(3)}deg) skewX(${glitch.skew.toFixed(2)}deg)`;
+    if (m.glitchUntil > 0) {
+      m.el.style.transform = `translate3d(${glitch.x.toFixed(2)}px, ${glitch.y.toFixed(2)}px, 0) rotate(${glitch.rot.toFixed(3)}deg) skewX(${glitch.skew.toFixed(2)}deg)`;
+    } else if (floating) {
+      m.el.style.transform = "translate3d(0, 0, 0) rotate(0deg) skewX(0deg)";
     }
+
     if (floating || m.glitchUntil > 0) {
       m.el.style.opacity = glitch.opacity.toFixed(3);
     }
@@ -401,8 +311,6 @@ function onPointer(e: PointerEvent) {
     const dx = x - prevX;
     const dy = y - prevY;
     spawnTrail(x, y, dx, dy, performance.now());
-    pointerDeltaX += dx;
-    pointerDeltaY += dy;
   }
 
   prevX = pointerX === -9999 ? x : pointerX;
@@ -416,104 +324,113 @@ function onPointerLeave() {
   pointerActive = false;
   pointerX = -9999;
   pointerY = -9999;
-  pointerDeltaX = 0;
-  pointerDeltaY = 0;
 }
 
 function drawOcean(now: number) {
   const t = now * 0.001;
 
-  // deep night sea base
+  // near-void black
   const base = ctx.createLinearGradient(0, 0, 0, height);
-  base.addColorStop(0, "#041018");
-  base.addColorStop(0.35, "#061820");
-  base.addColorStop(0.7, "#030b12");
-  base.addColorStop(1, "#010507");
+  base.addColorStop(0, "#010203");
+  base.addColorStop(0.35, "#010302");
+  base.addColorStop(0.7, "#000100");
+  base.addColorStop(1, "#000000");
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, width, height);
 
-  // distant moon path / soft sky glow
-  const moon = ctx.createRadialGradient(
-    width * 0.62,
-    height * 0.12,
+  // almost invisible cold breath
+  const mist = ctx.createRadialGradient(
+    width * 0.5,
+    height * 0.1,
     0,
-    width * 0.62,
-    height * 0.12,
-    height * 0.42,
+    width * 0.5,
+    height * 0.1,
+    height * 0.45,
   );
-  moon.addColorStop(0, "rgba(150, 175, 190, 0.14)");
-  moon.addColorStop(0.35, "rgba(70, 100, 120, 0.06)");
-  moon.addColorStop(1, "rgba(0, 0, 0, 0)");
-  ctx.fillStyle = moon;
+  mist.addColorStop(0, "rgba(35, 48, 44, 0.04)");
+  mist.addColorStop(0.5, "rgba(18, 28, 26, 0.018)");
+  mist.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = mist;
   ctx.fillRect(0, 0, width, height);
 
-  // rolling dark swell bands
-  for (let band = 0; band < 8; band++) {
-    const yBase = height * (0.14 + band * 0.11);
-    const amp = 14 + band * 4.5;
-    const speed = 0.16 + band * 0.045;
-    const phase = band * 1.3;
+  // heavy black swells — barely readable
+  for (let band = 0; band < 9; band++) {
+    const yBase = height * (0.1 + band * 0.105);
+    const amp = 11 + band * 4.8;
+    const speed = 0.07 + band * 0.022;
+    const phase = band * 1.45;
 
     ctx.beginPath();
     ctx.moveTo(0, height);
-    for (let x = 0; x <= width; x += 10) {
+    for (let x = 0; x <= width; x += 12) {
       const y =
         yBase +
-        Math.sin(x * 0.0042 + t * speed + phase) * amp +
-        Math.sin(x * 0.01 + t * speed * 1.35 + phase) * (amp * 0.4);
+        Math.sin(x * 0.0034 + t * speed + phase) * amp +
+        Math.sin(x * 0.0085 + t * speed * 1.15 + phase) * (amp * 0.35);
       if (x === 0) ctx.lineTo(0, y);
       else ctx.lineTo(x, y);
     }
     ctx.lineTo(width, height);
     ctx.closePath();
 
-    const depth = 0.055 + band * 0.022;
-    ctx.fillStyle = `rgba(${6 + band * 2}, ${24 + band * 5}, ${34 + band * 6}, ${depth})`;
+    const depth = 0.09 + band * 0.035;
+    ctx.fillStyle = `rgba(${1 + band}, ${4 + band}, ${5 + band}, ${depth})`;
     ctx.fill();
 
-    // crest highlight
     ctx.beginPath();
-    for (let x = 0; x <= width; x += 14) {
+    for (let x = 0; x <= width; x += 18) {
       const y =
         yBase +
-        Math.sin(x * 0.0042 + t * speed + phase) * amp +
-        Math.sin(x * 0.01 + t * speed * 1.35 + phase) * (amp * 0.4);
+        Math.sin(x * 0.0034 + t * speed + phase) * amp +
+        Math.sin(x * 0.0085 + t * speed * 1.15 + phase) * (amp * 0.35);
       if (x === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
-    ctx.strokeStyle = `rgba(140, 180, 200, ${0.025 + band * 0.004})`;
+    ctx.strokeStyle = `rgba(50, 70, 65, ${0.006 + band * 0.0015})`;
     ctx.lineWidth = 1;
     ctx.stroke();
   }
 
-  // surface shimmer / caustics
+  // rare murky caustics
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  for (let i = 0; i < 5; i++) {
-    const cx = ((Math.sin(t * 0.15 + i * 1.7) * 0.5 + 0.5) * width);
-    const cy = height * (0.35 + i * 0.1) + Math.cos(t * 0.22 + i) * 28;
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 90 + i * 30);
-    g.addColorStop(0, `rgba(120, 170, 190, ${0.035 + i * 0.004})`);
-    g.addColorStop(0.45, `rgba(50, 100, 120, ${0.015})`);
+  for (let i = 0; i < 3; i++) {
+    const cx = (Math.sin(t * 0.08 + i * 2.1) * 0.5 + 0.5) * width;
+    const cy = height * (0.42 + i * 0.12) + Math.cos(t * 0.11 + i) * 18;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 60 + i * 24);
+    g.addColorStop(0, `rgba(40, 65, 60, ${0.008 + i * 0.002})`);
+    g.addColorStop(0.55, `rgba(18, 32, 30, 0.003)`);
     g.addColorStop(1, "rgba(0, 0, 0, 0)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, width, height);
   }
-
-  // faint horizontal light streaks on water
-  for (let i = 0; i < 18; i++) {
-    const y =
-      ((i / 18) * height + Math.sin(t * 0.3 + i) * 18 + height) % height;
-    const alpha = 0.012 + (Math.sin(t * 0.8 + i * 0.7) * 0.5 + 0.5) * 0.02;
-    ctx.strokeStyle = `rgba(170, 205, 220, ${alpha})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    const x0 = ((Math.sin(t * 0.2 + i) * 0.5 + 0.5) * width * 0.7);
-    ctx.moveTo(x0, y);
-    ctx.lineTo(x0 + 40 + (i % 5) * 18, y + Math.sin(t + i) * 2);
-    ctx.stroke();
-  }
   ctx.restore();
+
+  // crush the frame into darkness
+  const fog = ctx.createRadialGradient(
+    width * 0.5,
+    height * 0.42,
+    height * 0.08,
+    width * 0.5,
+    height * 0.45,
+    height * 0.82,
+  );
+  fog.addColorStop(0, "rgba(0, 0, 0, 0)");
+  fog.addColorStop(0.45, "rgba(0, 0, 0, 0.4)");
+  fog.addColorStop(1, "rgba(0, 0, 0, 0.88)");
+  ctx.fillStyle = fog;
+  ctx.fillRect(0, 0, width, height);
+
+  // during shock: brief cold invert flash washed into the abyss
+  if (shockUntil > now) {
+    const tick = Math.floor(now / 28);
+    const rnd = Math.sin(tick * 19.3 + shockSeed) * 43758.5453;
+    const n = rnd - Math.floor(rnd);
+    if (n > 0.82) {
+      ctx.fillStyle = `rgba(140, 170, 160, ${0.04 + n * 0.08})`;
+      ctx.fillRect(0, 0, width, height);
+    }
+  }
 }
 
 function drawInteraction() {

@@ -1,7 +1,7 @@
 :root {
-  --ink: #010507;
-  --sea: #061820;
-  --bone: #d4d8d6;
+  --ink: #000000;
+  --sea: #020706;
+  --bone: #c8ccc8;
 }
 
 *,
@@ -37,20 +37,25 @@ body {
   inset: 0;
   z-index: 0;
   background:
-    radial-gradient(ellipse 80% 45% at 62% 8%, rgba(90, 120, 140, 0.18), transparent 55%),
-    linear-gradient(180deg, #041018 0%, #061820 40%, #030b12 75%, #010507 100%);
-  animation: tide 22s ease-in-out infinite alternate;
+    radial-gradient(ellipse 60% 35% at 50% 4%, rgba(28, 40, 36, 0.06), transparent 55%),
+    linear-gradient(180deg, #010203 0%, #000100 45%, #000000 100%);
+  animation: tide 32s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.scene.is-shocking {
+  transform: translate3d(var(--sx, 0), var(--sy, 0), 0) rotate(var(--srot, 0deg));
 }
 
 @keyframes tide {
   0% {
-    filter: brightness(0.94) saturate(1.05);
+    filter: brightness(0.7) saturate(0.7);
   }
   50% {
-    filter: brightness(1.04) saturate(1.12);
+    filter: brightness(0.78) saturate(0.75);
   }
   100% {
-    filter: brightness(0.97) saturate(1.02);
+    filter: brightness(0.72) saturate(0.65);
   }
 }
 
@@ -66,7 +71,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.14;
+  opacity: 0.28;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   animation: grain-shift 0.8s steps(2) infinite;
@@ -95,11 +100,23 @@ body {
   inset: 0;
   pointer-events: none;
   background: radial-gradient(
-    ellipse 60% 55% at 50% 45%,
-    transparent 15%,
-    rgba(0, 5, 10, 0.45) 70%,
-    rgba(0, 0, 0, 0.86) 100%
+    ellipse 48% 42% at 50% 44%,
+    transparent 2%,
+    rgba(0, 0, 0, 0.65) 58%,
+    rgba(0, 0, 0, 0.97) 100%
   );
+}
+
+.shock {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%, rgba(180, 210, 200, 0.55), transparent 70%),
+    linear-gradient(180deg, rgba(200, 230, 220, 0.25), rgba(0, 0, 0, 0.15));
+  mix-blend-mode: screen;
+  z-index: 2;
 }
 
 .brand {
