@@ -1,29 +1,47 @@
 import "./style.css";
+import { BREMEN_OUTLINE } from "./bremenOutline";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <div class="scene" aria-hidden="true">
     <canvas id="water"></canvas>
     <div class="grain"></div>
     <div class="vignette"></div>
-    <div class="shock" id="shock"></div>
+    <canvas id="watch"></canvas>
   </div>
   <main class="brand">
     <div class="brand-stack">
       <h1 id="mark" aria-label="fantrixx"></h1>
-      <a
-        class="github"
-        href="https://github.com/fantrixx"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="GitHub"
-      >
-        <svg viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.125 7.523 5.125 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z"
-          />
-        </svg>
-      </a>
+      <div class="brand-links">
+        <a
+          class="github"
+          href="https://github.com/fantrixx"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="GitHub"
+        >
+          <svg viewBox="0 0 98 96" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.125 7.523 5.125 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z"
+            />
+          </svg>
+        </a>
+        <button
+          type="button"
+          class="ambient-toggle"
+          id="ambient-toggle"
+          aria-pressed="false"
+          aria-label="Ambient sound"
+          title="Ambient"
+        >
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M4 9v6h3l5 4V5L7 9H4zm11.5 3c0-1.77-1-3.29-2.5-4.03v8.05c1.5-.74 2.5-2.26 2.5-4.02z"
+            />
+          </svg>
+        </button>
+      </div>
     </div>
   </main>
 `;
@@ -48,14 +66,19 @@ type Wake = {
 
 const canvas = document.querySelector<HTMLCanvasElement>("#water")!;
 const ctx = canvas.getContext("2d")!;
+const watchCanvas = document.querySelector<HTMLCanvasElement>("#watch")!;
+const watchCtx = watchCanvas.getContext("2d")!;
 const mark = document.querySelector<HTMLHeadingElement>("#mark")!;
-const scene = document.querySelector<HTMLDivElement>(".scene")!;
-const shockEl = document.querySelector<HTMLDivElement>("#shock")!;
+const ambientToggle = document.querySelector<HTMLButtonElement>("#ambient-toggle")!;
 
-const letters = "fantrixx".split("").map((ch, i) => {
+const TRUE_WORD = "fantrixx";
+const FALSE_CHARS = ["1", "0", "l", "/", "x", "z", "·", "ı"];
+
+const letters = TRUE_WORD.split("").map((ch, i) => {
   const span = document.createElement("span");
   span.className = "letter";
   span.textContent = ch;
+  span.dataset.true = ch;
   span.style.setProperty("--i", String(i));
   mark.appendChild(span);
   return span;
@@ -73,14 +96,61 @@ const letterMotion: LetterMotion[] = letters.map((el) => ({
   glitchSeed: Math.random() * 1000,
 }));
 
+type Eyes = {
+  x: number;
+  y: number;
+  born: number;
+  life: number;
+  gap: number;
+  size: number;
+  alpha: number;
+  seen: boolean;
+};
+
+type Firefly = {
+  // Bezier flight: enter off-screen → arc through frame → exit
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  born: number;
+  duration: number;
+  size: number;
+  phase: number;
+  x: number;
+  y: number;
+  alpha: number;
+};
+
 let width = 0;
 let height = 0;
 let dpr = Math.min(window.devicePixelRatio || 1, 2);
 let floating = false;
 let nextGlitchAt = 0;
-let nextShockAt = 0;
-let shockUntil = 0;
-let shockSeed = 0;
+let nextFalseAt = 0;
+let nextEyesAt = 0;
+let nextFireflyAt = 0;
+let nextSilhouetteAt = 0;
+let falseUntil = 0;
+let falseIndex = -1;
+let falseChar = "";
+
+type Silhouette = {
+  x: number;
+  y: number;
+  scale: number;
+  rot: number;
+  skew: number;
+  born: number;
+  life: number;
+  alpha: number;
+};
+
+let silhouette: Silhouette | null = null;
+let eyes: Eyes | null = null;
+const fireflies: Firefly[] = [];
 
 const ripples: Ripple[] = [];
 const wakes: Wake[] = [];
@@ -92,9 +162,31 @@ let prevY = -9999;
 let pointerActive = false;
 let lastSpawn = 0;
 
+// Optional ambient — silent until the user enables it
+let audioCtx: AudioContext | null = null;
+let masterGain: GainNode | null = null;
+let ambientOn = false;
+
 function scheduleNextGlitch(now: number) {
-  // Sparse bursts — sometimes soon, sometimes a longer quiet stretch
-  nextGlitchAt = now + 1800 + Math.random() * 6500;
+  // Sparse — long quiet stretches between almost-missable bursts
+  nextGlitchAt = now + 5000 + Math.random() * 14000;
+}
+
+function scheduleNextFalse(now: number) {
+  nextFalseAt = now + 7000 + Math.random() * 18000;
+}
+
+function scheduleNextEyes(now: number) {
+  // Rare — long dark stretches between a single pair of eyes
+  nextEyesAt = now + 9000 + Math.random() * 20000;
+}
+
+function scheduleNextFirefly(now: number) {
+  nextFireflyAt = now + 3500 + Math.random() * 11000;
+}
+
+function scheduleNextSilhouette(now: number) {
+  nextSilhouetteAt = now + 6000 + Math.random() * 12000;
 }
 
 function triggerGlitchBurst(now: number) {
@@ -124,6 +216,345 @@ function clearGlitch(m: LetterMotion) {
   m.el.style.removeProperty("--gy");
   m.el.style.removeProperty("--gclip");
   m.el.style.filter = "";
+}
+
+function triggerFalseLetter(now: number) {
+  // One wrong glyph for roughly a single frame — easy to doubt
+  falseIndex = Math.floor(Math.random() * letters.length);
+  const trueCh = letters[falseIndex].dataset.true || letters[falseIndex].textContent || "";
+  let pick = FALSE_CHARS[Math.floor(Math.random() * FALSE_CHARS.length)];
+  while (pick === trueCh) {
+    pick = FALSE_CHARS[Math.floor(Math.random() * FALSE_CHARS.length)];
+  }
+  falseChar = pick;
+  falseUntil = now + 20 + Math.random() * 28;
+  letters[falseIndex].textContent = falseChar;
+}
+
+function clearFalseLetter() {
+  if (falseIndex < 0) return;
+  const el = letters[falseIndex];
+  el.textContent = el.dataset.true || TRUE_WORD[falseIndex] || "";
+  falseIndex = -1;
+  falseUntil = 0;
+  falseChar = "";
+}
+
+function spawnEyes(now: number) {
+  if (eyes) return;
+  const cx = width * 0.5;
+  const cy = height * 0.45;
+  const minR = Math.min(width, height) * 0.22;
+  const maxR = Math.min(width, height) * 0.4;
+  const angle = Math.random() * Math.PI * 2;
+  const r = minR + Math.random() * (maxR - minR);
+  let x = cx + Math.cos(angle) * r * (width / Math.min(width, height));
+  let y = cy + Math.sin(angle) * r * (height / Math.min(width, height));
+  x = Math.max(width * 0.1, Math.min(width * 0.9, x));
+  y = Math.max(height * 0.12, Math.min(height * 0.85, y));
+
+  eyes = {
+    x,
+    y,
+    born: now,
+    life: 1600 + Math.random() * 2200,
+    gap: 10 + Math.random() * 6,
+    size: 1.5 + Math.random() * 1.1,
+    alpha: 0,
+    seen: false,
+  };
+}
+
+function updateEyes(now: number) {
+  if (!eyes) return;
+  const e = eyes;
+  const age = now - e.born;
+
+  if (pointerActive && Math.hypot(e.x - pointerX, e.y - pointerY) < 95) {
+    e.seen = true;
+  }
+
+  if (e.seen) {
+    e.alpha *= 0.62;
+    if (e.alpha < 0.01) eyes = null;
+    return;
+  }
+
+  // Brief illuminate: quick rise, short hold, soft extinguish
+  const t = age / e.life;
+  if (t >= 1) {
+    eyes = null;
+    return;
+  }
+  const envelope =
+    t < 0.18 ? t / 0.18 : t > 0.55 ? Math.max(0, (1 - t) / 0.45) : 1;
+  const flicker = 0.85 + Math.sin(now * 0.03 + e.x) * 0.15;
+  e.alpha = envelope * flicker * 0.7;
+}
+
+function edgePoint(side: number): { x: number; y: number } {
+  const m = 40;
+  switch (side % 4) {
+    case 0:
+      return { x: -m, y: Math.random() * height };
+    case 1:
+      return { x: width + m, y: Math.random() * height };
+    case 2:
+      return { x: Math.random() * width, y: -m };
+    default:
+      return { x: Math.random() * width, y: height + m };
+  }
+}
+
+function spawnFirefly(now: number) {
+  if (fireflies.length >= 2) return;
+  const enter = Math.floor(Math.random() * 4);
+  let exit = Math.floor(Math.random() * 4);
+  if (exit === enter) exit = (exit + 1 + Math.floor(Math.random() * 3)) % 4;
+  const a = edgePoint(enter);
+  const c = edgePoint(exit);
+  // Control point drifts through the dark midfield
+  const b = {
+    x: width * (0.15 + Math.random() * 0.7),
+    y: height * (0.15 + Math.random() * 0.7),
+  };
+
+  fireflies.push({
+    x0: a.x,
+    y0: a.y,
+    x1: b.x,
+    y1: b.y,
+    x2: c.x,
+    y2: c.y,
+    born: now,
+    duration: 2800 + Math.random() * 4200,
+    size: 1.1 + Math.random() * 1.4,
+    phase: Math.random() * Math.PI * 2,
+    x: a.x,
+    y: a.y,
+    alpha: 0,
+  });
+}
+
+function updateFireflies(now: number) {
+  for (let i = fireflies.length - 1; i >= 0; i--) {
+    const f = fireflies[i];
+    const u = (now - f.born) / f.duration;
+    if (u >= 1) {
+      fireflies.splice(i, 1);
+      continue;
+    }
+
+    // Quadratic bezier through the frame
+    const omt = 1 - u;
+    f.x = omt * omt * f.x0 + 2 * omt * u * f.x1 + u * u * f.x2;
+    f.y = omt * omt * f.y0 + 2 * omt * u * f.y1 + u * u * f.y2;
+    // Soft wander off the pure curve
+    f.x += Math.sin(now * 0.004 + f.phase) * 6;
+    f.y += Math.cos(now * 0.0035 + f.phase * 1.3) * 5;
+
+    const enter = Math.min(1, u / 0.12);
+    const leave = Math.min(1, (1 - u) / 0.18);
+    // Bioluminescent pulse — irregular, not a steady lamp
+    const pulse =
+      0.35 +
+      0.65 *
+        Math.max(
+          0,
+          Math.sin(now * 0.012 + f.phase) *
+            Math.sin(now * 0.007 + f.phase * 2.1),
+        );
+    f.alpha = enter * leave * pulse * 0.85;
+  }
+}
+
+function spawnSilhouette(now: number) {
+  const size = Math.min(width, height);
+  const scale = size * (0.32 + Math.random() * 0.28);
+  silhouette = {
+    x: width * (0.18 + Math.random() * 0.64),
+    y: height * (0.22 + Math.random() * 0.56),
+    scale,
+    rot: (Math.random() - 0.5) * 0.4,
+    skew: (Math.random() - 0.5) * 0.12,
+    born: now,
+    life: 7000 + Math.random() * 6000,
+    alpha: 0,
+  };
+}
+
+function updateSilhouette(now: number) {
+  if (!silhouette) return;
+  const s = silhouette;
+  const age = now - s.born;
+  if (age >= s.life) {
+    silhouette = null;
+    return;
+  }
+  const fadeIn = Math.min(1, age / 1400);
+  const fadeOut = age > s.life - 2400 ? Math.max(0, (s.life - age) / 2400) : 1;
+  // Faint gray — visible if you look, easy to doubt
+  s.alpha = fadeIn * fadeOut * (0.11 + Math.sin(now * 0.0008) * 0.02);
+}
+
+function drawSilhouettePath(target: CanvasRenderingContext2D) {
+  if (!silhouette || silhouette.alpha < 0.008) return;
+  const s = silhouette;
+  const pts = BREMEN_OUTLINE;
+  if (pts.length < 3) return;
+
+  target.save();
+  target.translate(s.x, s.y);
+  target.rotate(s.rot);
+  target.transform(1, 0, s.skew, 1, 0, 0);
+  target.translate(-s.scale * 0.5, -s.scale * 0.52);
+  target.scale(s.scale, s.scale * 0.82);
+
+  target.beginPath();
+  target.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) {
+    target.lineTo(pts[i][0], pts[i][1]);
+  }
+  target.closePath();
+
+  const a = s.alpha;
+  target.fillStyle = `rgba(140, 148, 145, ${a * 0.35})`;
+  target.fill();
+  // Hairline outline carries most of the recognition
+  target.strokeStyle = `rgba(175, 182, 178, ${a})`;
+  target.lineWidth = Math.max(1.25 / s.scale, 0.004);
+  target.lineJoin = "round";
+  target.stroke();
+  target.restore();
+}
+
+function drawOverlays(now: number) {
+  watchCtx.clearRect(0, 0, width, height);
+
+  drawSilhouettePath(watchCtx);
+
+  watchCtx.save();
+  watchCtx.globalCompositeOperation = "lighter";
+
+  // A few eyes — just illuminate, then go dark
+  if (eyes && eyes.alpha > 0.01) {
+    const e = eyes;
+    const drawEye = (x: number, y: number) => {
+      const g = watchCtx.createRadialGradient(x, y, 0, x, y, e.size * 6);
+      g.addColorStop(0, `rgba(200, 220, 210, ${0.5 * e.alpha})`);
+      g.addColorStop(0.4, `rgba(100, 140, 125, ${0.16 * e.alpha})`);
+      g.addColorStop(1, "rgba(0, 0, 0, 0)");
+      watchCtx.fillStyle = g;
+      watchCtx.beginPath();
+      watchCtx.arc(x, y, e.size * 6, 0, Math.PI * 2);
+      watchCtx.fill();
+      watchCtx.fillStyle = `rgba(225, 240, 230, ${0.7 * e.alpha})`;
+      watchCtx.beginPath();
+      watchCtx.arc(x, y, Math.max(1.1, e.size * 0.65), 0, Math.PI * 2);
+      watchCtx.fill();
+    };
+    drawEye(e.x - e.gap * 0.5, e.y);
+    drawEye(e.x + e.gap * 0.5, e.y);
+  }
+
+  // Glowworms — drift in, pulse, leave
+  for (const f of fireflies) {
+    if (f.alpha < 0.02) continue;
+    const trail = 0.55 + 0.45 * Math.sin(now * 0.02 + f.phase);
+    const s = f.size * (0.85 + trail * 0.25);
+    const g = watchCtx.createRadialGradient(f.x, f.y, 0, f.x, f.y, s * 9);
+    g.addColorStop(0, `rgba(190, 255, 170, ${0.45 * f.alpha})`);
+    g.addColorStop(0.25, `rgba(120, 200, 110, ${0.18 * f.alpha})`);
+    g.addColorStop(0.6, `rgba(70, 120, 90, ${0.05 * f.alpha})`);
+    g.addColorStop(1, "rgba(0, 0, 0, 0)");
+    watchCtx.fillStyle = g;
+    watchCtx.beginPath();
+    watchCtx.arc(f.x, f.y, s * 9, 0, Math.PI * 2);
+    watchCtx.fill();
+
+    watchCtx.fillStyle = `rgba(220, 255, 200, ${0.8 * f.alpha * trail})`;
+    watchCtx.beginPath();
+    watchCtx.arc(f.x, f.y, Math.max(0.9, s * 0.55), 0, Math.PI * 2);
+    watchCtx.fill();
+  }
+
+  watchCtx.restore();
+}
+
+async function ensureAmbient() {
+  if (audioCtx) return;
+  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  audioCtx = new Ctx();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0;
+  masterGain.connect(audioCtx.destination);
+
+  // Deep sub drone
+  const oscA = audioCtx.createOscillator();
+  oscA.type = "sine";
+  oscA.frequency.value = 42;
+  const oscB = audioCtx.createOscillator();
+  oscB.type = "sine";
+  oscB.frequency.value = 63.5;
+  const droneGain = audioCtx.createGain();
+  droneGain.gain.value = 0.22;
+  oscA.connect(droneGain);
+  oscB.connect(droneGain);
+
+  // Soft filtered noise (wind / void)
+  const bufferSize = audioCtx.sampleRate * 2;
+  const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuffer;
+  noise.loop = true;
+  const noiseFilter = audioCtx.createBiquadFilter();
+  noiseFilter.type = "lowpass";
+  noiseFilter.frequency.value = 280;
+  noiseFilter.Q.value = 0.5;
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.value = 0.035;
+  noise.connect(noiseFilter);
+  noiseFilter.connect(noiseGain);
+
+  // Occasional very sparse pulse via LFO on a quiet high partial
+  const pulse = audioCtx.createOscillator();
+  pulse.type = "sine";
+  pulse.frequency.value = 110;
+  const pulseGain = audioCtx.createGain();
+  pulseGain.gain.value = 0;
+  const lfo = audioCtx.createOscillator();
+  lfo.type = "sine";
+  lfo.frequency.value = 0.07;
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 0.012;
+  lfo.connect(lfoGain);
+  lfoGain.connect(pulseGain.gain);
+  pulse.connect(pulseGain);
+
+  droneGain.connect(masterGain);
+  noiseGain.connect(masterGain);
+  pulseGain.connect(masterGain);
+
+  oscA.start();
+  oscB.start();
+  noise.start();
+  pulse.start();
+  lfo.start();
+}
+
+async function setAmbient(on: boolean) {
+  await ensureAmbient();
+  if (!audioCtx || !masterGain) return;
+  if (audioCtx.state === "suspended") await audioCtx.resume();
+  ambientOn = on;
+  const now = audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(now);
+  masterGain.gain.setValueAtTime(masterGain.gain.value, now);
+  masterGain.gain.linearRampToValueAtTime(on ? 0.09 : 0, now + (on ? 2.4 : 1.2));
+  ambientToggle.setAttribute("aria-pressed", on ? "true" : "false");
+  ambientToggle.classList.toggle("is-on", on);
 }
 
 function updateGlitch(m: LetterMotion, now: number, baseOpacity: number) {
@@ -166,72 +597,55 @@ function updateGlitch(m: LetterMotion, now: number, baseOpacity: number) {
   };
 }
 
-function scheduleNextShock(now: number) {
-  nextShockAt = now + 4500 + Math.random() * 11000;
-}
-
-function triggerShock(now: number) {
-  shockSeed = Math.random() * 1000;
-  const double = Math.random() < 0.35;
-  shockUntil = now + (double ? 220 + Math.random() * 180 : 90 + Math.random() * 120);
-  scene.classList.add("is-shocking");
-  shockEl.classList.add("is-on");
-}
-
-function updateShock(now: number) {
-  if (shockUntil <= 0) {
-    scene.style.removeProperty("--sx");
-    scene.style.removeProperty("--sy");
-    scene.style.removeProperty("--srot");
-    return;
-  }
-
-  if (now >= shockUntil) {
-    shockUntil = 0;
-    scene.classList.remove("is-shocking");
-    shockEl.classList.remove("is-on");
-    shockEl.style.opacity = "0";
-    scene.style.removeProperty("--sx");
-    scene.style.removeProperty("--sy");
-    scene.style.removeProperty("--srot");
-    return;
-  }
-
-  const left = shockUntil - now;
-  const tick = Math.floor(now / 28);
-  const rnd = Math.sin(tick * 19.3 + shockSeed) * 43758.5453;
-  const n = rnd - Math.floor(rnd);
-  const hard = n > 0.55;
-
-  const sx = (n - 0.5) * (hard ? 18 : 6);
-  const sy = (Math.sin(tick * 4.2 + shockSeed) - 0.5) * (hard ? 12 : 4);
-  const srot = (n - 0.5) * (hard ? 1.2 : 0.35);
-  scene.style.setProperty("--sx", `${sx.toFixed(2)}px`);
-  scene.style.setProperty("--sy", `${sy.toFixed(2)}px`);
-  scene.style.setProperty("--srot", `${srot.toFixed(3)}deg`);
-
-  let flash = 0;
-  if (hard && left > 40) flash = 0.08 + n * 0.22;
-  if (n > 0.9) flash = 0.35 + n * 0.25;
-  if (n > 0.97) flash = 0.7;
-  shockEl.style.opacity = flash.toFixed(3);
-}
+ambientToggle.addEventListener("click", () => {
+  void setAmbient(!ambientOn);
+});
 
 function updateFloat(now: number) {
   if (floating) {
-    if (nextGlitchAt === 0) scheduleNextGlitch(now + 1200);
+    if (nextGlitchAt === 0) scheduleNextGlitch(now + 2500);
     if (now >= nextGlitchAt) {
-      triggerGlitchBurst(now);
+      // Sometimes skip a scheduled slot entirely — keeps doubt alive
+      if (Math.random() < 0.72) triggerGlitchBurst(now);
       scheduleNextGlitch(now);
     }
-    if (nextShockAt === 0) scheduleNextShock(now + 2500);
-    if (now >= nextShockAt) {
-      triggerShock(now);
-      scheduleNextShock(now);
+
+    if (nextFalseAt === 0) scheduleNextFalse(now + 4000);
+    if (now >= nextFalseAt) {
+      if (falseUntil <= 0 && Math.random() < 0.8) triggerFalseLetter(now);
+      scheduleNextFalse(now);
+    }
+
+    if (nextEyesAt === 0) scheduleNextEyes(now + 4000);
+    if (now >= nextEyesAt) {
+      if (!eyes && Math.random() < 0.7) spawnEyes(now);
+      scheduleNextEyes(now);
+    }
+
+    if (nextFireflyAt === 0) scheduleNextFirefly(now + 1500);
+    if (now >= nextFireflyAt) {
+      if (Math.random() < 0.8) spawnFirefly(now);
+      // Sometimes a second, delayed companion — still sparse
+      if (Math.random() < 0.2) {
+        window.setTimeout(() => {
+          if (floating) spawnFirefly(performance.now());
+        }, 400 + Math.random() * 900);
+      }
+      scheduleNextFirefly(now);
+    }
+
+    if (nextSilhouetteAt === 0) scheduleNextSilhouette(now + 1200);
+    if (now >= nextSilhouetteAt) {
+      if (!silhouette) spawnSilhouette(now);
+      scheduleNextSilhouette(now);
     }
   }
 
-  updateShock(now);
+  if (falseUntil > 0 && now >= falseUntil) clearFalseLetter();
+
+  updateEyes(now);
+  updateFireflies(now);
+  updateSilhouette(now);
 
   letterMotion.forEach((m) => {
     const baseOpacity = floating ? 0.88 : Number(m.el.style.opacity) || 0.88;
@@ -262,11 +676,14 @@ function resize() {
   width = window.innerWidth;
   height = window.innerHeight;
   dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.floor(width * dpr);
-  canvas.height = Math.floor(height * dpr);
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
+  for (const c of [canvas, watchCanvas]) {
+    c.width = Math.floor(width * dpr);
+    c.height = Math.floor(height * dpr);
+    c.style.width = `${width}px`;
+    c.style.height = `${height}px`;
+  }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  watchCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 function spawnTrail(x: number, y: number, dx: number, dy: number, now: number) {
@@ -420,17 +837,6 @@ function drawOcean(now: number) {
   fog.addColorStop(1, "rgba(0, 0, 0, 0.88)");
   ctx.fillStyle = fog;
   ctx.fillRect(0, 0, width, height);
-
-  // during shock: brief cold invert flash washed into the abyss
-  if (shockUntil > now) {
-    const tick = Math.floor(now / 28);
-    const rnd = Math.sin(tick * 19.3 + shockSeed) * 43758.5453;
-    const n = rnd - Math.floor(rnd);
-    if (n > 0.82) {
-      ctx.fillStyle = `rgba(140, 170, 160, ${0.04 + n * 0.08})`;
-      ctx.fillRect(0, 0, width, height);
-    }
-  }
 }
 
 function drawInteraction() {
@@ -502,6 +908,7 @@ function drawInteraction() {
 function tick(now: number) {
   updateFloat(now);
   drawOcean(now);
+  drawOverlays(now);
   drawInteraction();
   requestAnimationFrame(tick);
 }
