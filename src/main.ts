@@ -149,8 +149,22 @@ type Silhouette = {
   alpha: number;
 };
 
+type BleedDrop = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  born: number;
+  life: number;
+  phase: number;
+  stretch: number;
+};
+
 let silhouette: Silhouette | null = null;
 let firstSilhouetteDone = false;
+const bleedDrops: BleedDrop[] = [];
+let bleedPulse = 0;
 let eyes: Eyes | null = null;
 const fireflies: Firefly[] = [];
 
@@ -495,20 +509,95 @@ function spawnSilhouette(now: number) {
     life: 7000 + Math.random() * 6000,
     alpha: 0,
   };
+
+  bleedDrops.length = 0;
+  bleedPulse = 0;
+  const [ox, oy] = BREMEN_OBERNEULAND;
+  for (let i = 0; i < 10; i++) {
+    bleedDrops.push({
+      x: ox + (Math.random() - 0.5) * 0.05,
+      y: oy + (Math.random() - 0.5) * 0.035,
+      vx: (Math.random() - 0.5) * 0.000012,
+      vy: 0.000004 + Math.random() * 0.000014,
+      r: 0.006 + Math.random() * 0.012,
+      born: now + Math.random() * 900,
+      life: 2800 + Math.random() * 4200,
+      phase: Math.random() * Math.PI * 2,
+      stretch: 0.6 + Math.random() * 0.8,
+    });
+  }
 }
 
 function updateSilhouette(now: number) {
-  if (!silhouette) return;
+  if (!silhouette) {
+    bleedDrops.length = 0;
+    return;
+  }
   const s = silhouette;
   const age = now - s.born;
   if (age >= s.life) {
     silhouette = null;
+    bleedDrops.length = 0;
     return;
   }
   const fadeIn = Math.min(1, age / 1400);
   const fadeOut = age > s.life - 2400 ? Math.max(0, (s.life - age) / 2400) : 1;
-  // Faint gray — visible if you look, easy to doubt
   s.alpha = fadeIn * fadeOut * (0.11 + Math.sin(now * 0.0008) * 0.02);
+
+  bleedPulse =
+    0.55 +
+    Math.sin(now * 0.0038) * 0.22 +
+    Math.sin(now * 0.0087 + 0.8) * 0.14 +
+    Math.sin(now * 0.015) * 0.06;
+
+  const [ox, oy] = BREMEN_OBERNEULAND;
+  for (let i = bleedDrops.length - 1; i >= 0; i--) {
+    const d = bleedDrops[i];
+    if (now < d.born) continue;
+    const localAge = now - d.born;
+    if (localAge > d.life) {
+      if (fadeOut > 0.25 && Math.random() < 0.55) {
+        d.x = ox + (Math.random() - 0.5) * 0.04;
+        d.y = oy + (Math.random() - 0.35) * 0.03;
+        d.vx = (Math.random() - 0.5) * 0.000014;
+        d.vy = 0.000005 + Math.random() * 0.000016;
+        d.r = 0.005 + Math.random() * 0.011;
+        d.born = now;
+        d.life = 2400 + Math.random() * 3800;
+        d.phase = Math.random() * Math.PI * 2;
+        d.stretch = 0.7 + Math.random() * 0.9;
+      } else {
+        bleedDrops.splice(i, 1);
+      }
+      continue;
+    }
+    d.vx += Math.sin(now * 0.0022 + d.phase) * 0.00000035;
+    d.vy += 0.00000012;
+    d.x += d.vx * 16;
+    d.y += d.vy * 16;
+    d.x += (ox - d.x) * 0.004;
+    d.y += (oy + 0.02 - d.y) * 0.0025;
+    d.stretch = 0.7 + Math.min(1.8, d.vy * 90000);
+  }
+
+  if (
+    fadeIn > 0.5 &&
+    fadeOut > 0.4 &&
+    bleedDrops.length < 14 &&
+    Math.random() < 0.035
+  ) {
+    bleedDrops.push({
+      x: ox + (Math.random() - 0.5) * 0.035,
+      y: oy + (Math.random() - 0.4) * 0.025,
+      vx: (Math.random() - 0.5) * 0.00001,
+      vy: 0.000006 + Math.random() * 0.000012,
+      r: 0.004 + Math.random() * 0.008,
+      born: now,
+      life: 1800 + Math.random() * 2800,
+      phase: Math.random() * Math.PI * 2,
+      stretch: 0.8 + Math.random() * 0.6,
+    });
+  }
 }
 
 function traceBremenPath(target: CanvasRenderingContext2D) {
@@ -521,61 +610,214 @@ function traceBremenPath(target: CanvasRenderingContext2D) {
   target.closePath();
 }
 
+function drawOrganicBlob(
+  target: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  rot: number,
+  now: number,
+  seed: number,
+) {
+  const steps = 28;
+  target.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const u = (i / steps) * Math.PI * 2;
+    const wobble =
+      1 +
+      Math.sin(u * 3 + now * 0.003 + seed) * 0.12 +
+      Math.sin(u * 5 - now * 0.0025 + seed * 1.7) * 0.07 +
+      Math.sin(u * 2 + seed) * 0.05;
+    const px = Math.cos(u) * rx * wobble;
+    const py = Math.sin(u) * ry * wobble;
+    const x = cx + px * Math.cos(rot) - py * Math.sin(rot);
+    const y = cy + px * Math.sin(rot) + py * Math.cos(rot);
+    if (i === 0) target.moveTo(x, y);
+    else target.lineTo(x, y);
+  }
+  target.closePath();
+}
+
 function drawOberneulandBleed(
   target: CanvasRenderingContext2D,
   now: number,
   silhouetteAlpha: number,
 ) {
-  // Keep blood readable even while the gray outline stays faint
-  const a = Math.min(0.82, 0.42 + silhouetteAlpha * 2.8);
+  const a = Math.min(0.88, 0.48 + silhouetteAlpha * 2.6);
   const [ox, oy] = BREMEN_OBERNEULAND;
-  const t = now * 0.001;
-  const pulse =
-    0.6 +
-    Math.sin(now * 0.0042) * 0.22 +
-    Math.sin(now * 0.0095 + 1.2) * 0.14;
-  // District-scale blot — Oberneuland is a real Stadtteil, not a pinpoint
-  const rx = 0.07 + pulse * 0.025;
-  const ry = 0.055 + pulse * 0.02;
+  const pulse = bleedPulse || 0.7;
+  const rx = 0.078 + pulse * 0.028;
+  const ry = 0.058 + pulse * 0.022;
 
-  // Deep hematoma under the surface
-  const pool = target.createRadialGradient(ox, oy, 0, ox, oy, Math.max(rx, ry) * 1.35);
-  pool.addColorStop(0, `rgba(150, 10, 22, ${0.95 * a})`);
-  pool.addColorStop(0.28, `rgba(110, 4, 14, ${0.78 * a})`);
-  pool.addColorStop(0.55, `rgba(70, 0, 8, ${0.45 * a})`);
-  pool.addColorStop(0.82, `rgba(40, 0, 4, ${0.18 * a})`);
-  pool.addColorStop(1, "rgba(0, 0, 0, 0)");
-  target.fillStyle = pool;
+  // 1) Subsurface bruise
+  const bruise = target.createRadialGradient(ox, oy + 0.01, 0, ox, oy, rx * 1.7);
+  bruise.addColorStop(0, `rgba(60, 0, 18, ${0.55 * a})`);
+  bruise.addColorStop(0.45, `rgba(35, 0, 10, ${0.28 * a})`);
+  bruise.addColorStop(1, "rgba(0, 0, 0, 0)");
+  target.fillStyle = bruise;
   target.beginPath();
-  target.ellipse(ox, oy + 0.01, rx, ry, 0.25, 0, Math.PI * 2);
+  target.ellipse(ox, oy + 0.015, rx * 1.45, ry * 1.35, 0.2, 0, Math.PI * 2);
   target.fill();
 
-  // Seeping veins / under-run fingers
-  for (let i = 0; i < 7; i++) {
-    const ang = -0.9 + i * 0.42 + Math.sin(now * 0.002 + i * 1.7) * 0.2;
-    const len = 0.04 + pulse * 0.04 + (i % 3) * 0.012;
-    const ex = ox + Math.cos(ang) * len;
-    const ey = oy + 0.015 + Math.sin(ang) * len * 0.75 + Math.sin(t * 1.4 + i) * 0.01;
-    const drip = target.createRadialGradient(ex, ey, 0, ex, ey, 0.028 + pulse * 0.012);
-    drip.addColorStop(0, `rgba(170, 16, 28, ${0.85 * a})`);
-    drip.addColorStop(0.45, `rgba(95, 4, 12, ${0.4 * a})`);
-    drip.addColorStop(1, "rgba(0, 0, 0, 0)");
-    target.fillStyle = drip;
+  // 2) Deep venous pool with living edge
+  const pool = target.createRadialGradient(
+    ox,
+    oy,
+    0,
+    ox,
+    oy + 0.008,
+    Math.max(rx, ry) * 1.25,
+  );
+  pool.addColorStop(0, `rgba(170, 12, 28, ${0.98 * a})`);
+  pool.addColorStop(0.22, `rgba(120, 6, 18, ${0.9 * a})`);
+  pool.addColorStop(0.5, `rgba(75, 2, 10, ${0.62 * a})`);
+  pool.addColorStop(0.78, `rgba(40, 0, 6, ${0.28 * a})`);
+  pool.addColorStop(1, "rgba(0, 0, 0, 0)");
+  target.fillStyle = pool;
+  drawOrganicBlob(target, ox, oy + 0.01, rx, ry, 0.22, now, 1.1);
+  target.fill();
+
+  target.fillStyle = `rgba(100, 4, 14, ${0.45 * a})`;
+  drawOrganicBlob(
+    target,
+    ox + 0.025,
+    oy + 0.02,
+    rx * 0.45,
+    ry * 0.4,
+    -0.4,
+    now,
+    2.4,
+  );
+  target.fill();
+
+  // 3) Viscous tendrils
+  target.lineCap = "round";
+  target.lineJoin = "round";
+  for (let i = 0; i < 6; i++) {
+    const ang = -1.05 + i * 0.48 + Math.sin(now * 0.0016 + i * 1.3) * 0.18;
+    const len = 0.05 + pulse * 0.045 + (i % 3) * 0.01;
+    const mid = 0.45 + Math.sin(now * 0.0025 + i) * 0.08;
+    const x1 = ox + Math.cos(ang) * len * mid;
+    const y1 = oy + 0.01 + Math.sin(ang) * len * mid * 0.7 + 0.02;
+    const x2 = ox + Math.cos(ang) * len;
+    const y2 =
+      oy + 0.02 + Math.sin(ang) * len * 0.65 + 0.035 + Math.sin(now * 0.003 + i) * 0.008;
+    const thickness = (0.01 + (1 - i / 6) * 0.012) * (0.75 + pulse * 0.35);
+
+    const tendril = target.createLinearGradient(ox, oy, x2, y2);
+    tendril.addColorStop(0, `rgba(160, 14, 26, ${0.85 * a})`);
+    tendril.addColorStop(0.55, `rgba(100, 6, 14, ${0.55 * a})`);
+    tendril.addColorStop(1, `rgba(50, 0, 6, ${0.05 * a})`);
+    target.strokeStyle = tendril;
+    target.lineWidth = thickness;
     target.beginPath();
-    target.arc(ex, ey, 0.03, 0, Math.PI * 2);
+    target.moveTo(ox, oy + 0.008);
+    target.quadraticCurveTo(x1, y1, x2, y2);
+    target.stroke();
+
+    const tip = target.createRadialGradient(x2, y2, 0, x2, y2, thickness * 1.8);
+    tip.addColorStop(0, `rgba(180, 20, 34, ${0.7 * a})`);
+    tip.addColorStop(1, "rgba(0, 0, 0, 0)");
+    target.fillStyle = tip;
+    target.beginPath();
+    target.arc(x2, y2, thickness * 1.6, 0, Math.PI * 2);
     target.fill();
   }
 
-  // Wet pulse — blood rising under the skin of the map
-  const sheen = 0.25 + Math.max(0, Math.sin(now * 0.007 + t)) * 0.55;
-  const wet = target.createRadialGradient(ox - 0.01, oy - 0.008, 0, ox, oy, rx * 0.55);
-  wet.addColorStop(0, `rgba(200, 35, 48, ${sheen * a * 0.7})`);
-  wet.addColorStop(0.55, `rgba(130, 12, 22, ${sheen * a * 0.25})`);
+  // 4) Droplets
+  for (const d of bleedDrops) {
+    if (now < d.born) continue;
+    const lifeT = (now - d.born) / d.life;
+    const fade =
+      lifeT < 0.12 ? lifeT / 0.12 : lifeT > 0.7 ? Math.max(0, (1 - lifeT) / 0.3) : 1;
+    const da = a * fade * 0.9;
+    if (da < 0.02) continue;
+    const rr = d.r * (0.85 + pulse * 0.2);
+    const drop = target.createRadialGradient(
+      d.x,
+      d.y - rr * 0.2,
+      0,
+      d.x,
+      d.y,
+      rr * 2.2,
+    );
+    drop.addColorStop(0, `rgba(200, 30, 42, ${0.95 * da})`);
+    drop.addColorStop(0.4, `rgba(130, 10, 22, ${0.75 * da})`);
+    drop.addColorStop(1, "rgba(0, 0, 0, 0)");
+    target.fillStyle = drop;
+    target.beginPath();
+    target.ellipse(
+      d.x,
+      d.y,
+      rr * 0.85,
+      rr * (1.1 + d.stretch * 0.55),
+      0,
+      0,
+      Math.PI * 2,
+    );
+    target.fill();
+
+    target.fillStyle = `rgba(255, 120, 130, ${0.35 * da * pulse})`;
+    target.beginPath();
+    target.ellipse(
+      d.x - rr * 0.25,
+      d.y - rr * (0.35 + d.stretch * 0.1),
+      rr * 0.28,
+      rr * 0.18,
+      -0.5,
+      0,
+      Math.PI * 2,
+    );
+    target.fill();
+  }
+
+  // 5) Wet arterial sheen
+  const sheenPhase = now * 0.0045;
+  const sheen = 0.3 + Math.max(0, Math.sin(sheenPhase)) * 0.55;
+  const wet = target.createRadialGradient(
+    ox - 0.018 + Math.sin(sheenPhase * 0.7) * 0.012,
+    oy - 0.012,
+    0,
+    ox,
+    oy,
+    rx * 0.7,
+  );
+  wet.addColorStop(0, `rgba(255, 70, 85, ${sheen * a * 0.55})`);
+  wet.addColorStop(0.35, `rgba(190, 30, 48, ${sheen * a * 0.28})`);
+  wet.addColorStop(0.7, `rgba(120, 10, 22, ${sheen * a * 0.08})`);
   wet.addColorStop(1, "rgba(0, 0, 0, 0)");
   target.fillStyle = wet;
-  target.beginPath();
-  target.ellipse(ox - 0.006, oy - 0.004, rx * 0.45, ry * 0.35, -0.35, 0, Math.PI * 2);
+  drawOrganicBlob(
+    target,
+    ox - 0.01,
+    oy - 0.006,
+    rx * 0.48,
+    ry * 0.36,
+    -0.4 + Math.sin(sheenPhase) * 0.1,
+    now,
+    4.2,
+  );
   target.fill();
+
+  // 6) Clotting rim
+  target.strokeStyle = `rgba(30, 0, 4, ${0.35 * a * pulse})`;
+  target.lineWidth = 0.0045;
+  drawOrganicBlob(target, ox, oy + 0.01, rx * 0.92, ry * 0.9, 0.22, now, 1.1);
+  target.stroke();
+
+  // Micro coagulation flecks
+  for (let i = 0; i < 8; i++) {
+    const ang = i * 0.9 + now * 0.0007;
+    const rad = (0.015 + (i % 4) * 0.01) * (0.8 + pulse * 0.3);
+    const fx = ox + Math.cos(ang) * rad;
+    const fy = oy + Math.sin(ang * 1.3) * rad * 0.7;
+    const flick = 0.15 + Math.max(0, Math.sin(now * 0.01 + i * 2.1)) * 0.5;
+    target.fillStyle = `rgba(40, 0, 6, ${flick * a * 0.45})`;
+    target.beginPath();
+    target.arc(fx, fy, 0.0035 + (i % 3) * 0.0015, 0, Math.PI * 2);
+    target.fill();
+  }
 }
 
 function drawSilhouettePath(target: CanvasRenderingContext2D, now: number) {
