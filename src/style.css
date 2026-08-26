@@ -113,6 +113,13 @@ body {
   pointer-events: none;
 }
 
+.brand-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(1.1rem, 3.2vw, 1.75rem);
+}
+
 .brand h1 {
   display: flex;
   align-items: baseline;
@@ -128,6 +135,49 @@ body {
   will-change: transform;
   transform: translate3d(0, 0, 0);
   animation: reveal 3.2s ease 0.4s forwards;
+}
+
+.github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(1.05rem, 2.4vw, 1.35rem);
+  height: clamp(1.05rem, 2.4vw, 1.35rem);
+  color: var(--bone);
+  opacity: 0.28;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+  animation: github-in 2.8s ease 1.6s both;
+}
+
+.github:hover,
+.github:focus-visible {
+  animation: none;
+  opacity: 0.55;
+  transform: translateY(-1px);
+}
+
+.github:focus-visible {
+  outline: 1px solid rgba(212, 216, 214, 0.35);
+  outline-offset: 6px;
+}
+
+.github svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+@keyframes github-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 0.28;
+    filter: blur(0);
+  }
 }
 
 .brand h1 .letter {
