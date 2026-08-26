@@ -133,6 +133,8 @@ let nextGlitchAt = 0;
 let nextFalseAt = 0;
 let nextEyesAt = 0;
 let nextFireflyAt = 0;
+let firstEyesDone = false;
+let firstFireflyDone = false;
 let nextSilhouetteAt = 0;
 let falseUntil = 0;
 let falseIndex = -1;
@@ -203,8 +205,16 @@ function scheduleNextEyes(now: number) {
   nextEyesAt = now + 9000 + Math.random() * 20000;
 }
 
+function scheduleFirstEyes(now: number) {
+  nextEyesAt = now + 400 + Math.random() * 1600;
+}
+
 function scheduleNextFirefly(now: number) {
   nextFireflyAt = now + 3500 + Math.random() * 11000;
+}
+
+function scheduleFirstFirefly(now: number) {
+  nextFireflyAt = now + 200 + Math.random() * 900;
 }
 
 function scheduleNextSilhouette(now: number) {
@@ -1107,20 +1117,31 @@ function updateFloat(now: number) {
       scheduleNextFalse(now);
     }
 
-    if (nextEyesAt === 0) scheduleNextEyes(now + 4000);
+    if (nextEyesAt === 0) scheduleFirstEyes(now);
     if (now >= nextEyesAt) {
-      if (!eyes && Math.random() < 0.7) spawnEyes(now);
+      if (!eyes) {
+        if (!firstEyesDone) {
+          spawnEyes(now);
+          firstEyesDone = true;
+        } else if (Math.random() < 0.7) {
+          spawnEyes(now);
+        }
+      }
       scheduleNextEyes(now);
     }
 
-    if (nextFireflyAt === 0) scheduleNextFirefly(now + 1500);
+    if (nextFireflyAt === 0) scheduleFirstFirefly(now);
     if (now >= nextFireflyAt) {
-      if (Math.random() < 0.8) spawnFirefly(now);
-      // Sometimes a second, delayed companion — still sparse
-      if (Math.random() < 0.2) {
-        window.setTimeout(() => {
-          if (floating) spawnFirefly(performance.now());
-        }, 400 + Math.random() * 900);
+      if (!firstFireflyDone) {
+        spawnFirefly(now);
+        firstFireflyDone = true;
+      } else if (Math.random() < 0.8) {
+        spawnFirefly(now);
+        if (Math.random() < 0.2) {
+          window.setTimeout(() => {
+            if (floating) spawnFirefly(performance.now());
+          }, 400 + Math.random() * 900);
+        }
       }
       scheduleNextFirefly(now);
     }
