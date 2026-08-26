@@ -147,6 +147,12 @@ type Silhouette = {
   born: number;
   life: number;
   alpha: number;
+  seed: number;
+  gx: number;
+  gy: number;
+  gskew: number;
+  tear: number;
+  hard: boolean;
 };
 
 type BleedDrop = {
@@ -506,8 +512,15 @@ function spawnSilhouette(now: number) {
     rot,
     skew,
     born: now,
-    life: 7000 + Math.random() * 6000,
+    // Brief broken-video flash — not a soft fade
+    life: 380 + Math.random() * 520,
     alpha: 0,
+    seed: Math.random() * 1000,
+    gx: 0,
+    gy: 0,
+    gskew: 0,
+    tear: 100,
+    hard: false,
   };
 
   bleedDrops.length = 0;
@@ -520,8 +533,8 @@ function spawnSilhouette(now: number) {
       vx: (Math.random() - 0.5) * 0.000012,
       vy: 0.000004 + Math.random() * 0.000014,
       r: 0.006 + Math.random() * 0.012,
-      born: now + Math.random() * 900,
-      life: 2800 + Math.random() * 4200,
+      born: now,
+      life: 380 + Math.random() * 520,
       phase: Math.random() * Math.PI * 2,
       stretch: 0.6 + Math.random() * 0.8,
     });
@@ -540,9 +553,28 @@ function updateSilhouette(now: number) {
     bleedDrops.length = 0;
     return;
   }
-  const fadeIn = Math.min(1, age / 1400);
-  const fadeOut = age > s.life - 2400 ? Math.max(0, (s.life - age) / 2400) : 1;
-  s.alpha = fadeIn * fadeOut * (0.11 + Math.sin(now * 0.0008) * 0.02);
+
+  // Same broken-tape stutter as the letters
+  const tick = Math.floor(now / (26 + (s.seed % 15)));
+  const rnd = Math.sin(tick * 12.9898 + s.seed) * 43758.5453;
+  const n = rnd - Math.floor(rnd);
+  const hardCut = n > 0.62;
+  const tear = n > 0.84;
+  s.hard = hardCut;
+  s.gx = hardCut ? (n - 0.5) * 18 : (n - 0.5) * 4;
+  s.gy = tear ? Math.sin(tick * 3.1 + s.seed) * 8 : (n - 0.5) * 2;
+  s.gskew = hardCut ? (n - 0.5) * 0.12 : (n - 0.5) * 0.03;
+  s.tear = tear ? 30 + n * 55 : 100;
+
+  // Snap on / stutter / snap off — no soft fade envelope
+  const edge = age < 40 || age > s.life - 50;
+  if (edge && n < 0.4) {
+    s.alpha = 0;
+  } else if (hardCut) {
+    s.alpha = n > 0.93 ? 0.04 : 0.18 + n * 0.22;
+  } else {
+    s.alpha = 0.12 + n * 0.1;
+  }
 
   bleedPulse =
     0.55 +
@@ -550,53 +582,22 @@ function updateSilhouette(now: number) {
     Math.sin(now * 0.0087 + 0.8) * 0.14 +
     Math.sin(now * 0.015) * 0.06;
 
-  const [ox, oy] = BREMEN_OBERNEULAND;
+  const [box, boy] = BREMEN_OBERNEULAND;
   for (let i = bleedDrops.length - 1; i >= 0; i--) {
     const d = bleedDrops[i];
     if (now < d.born) continue;
     const localAge = now - d.born;
     if (localAge > d.life) {
-      if (fadeOut > 0.25 && Math.random() < 0.55) {
-        d.x = ox + (Math.random() - 0.5) * 0.04;
-        d.y = oy + (Math.random() - 0.35) * 0.03;
-        d.vx = (Math.random() - 0.5) * 0.000014;
-        d.vy = 0.000005 + Math.random() * 0.000016;
-        d.r = 0.005 + Math.random() * 0.011;
-        d.born = now;
-        d.life = 2400 + Math.random() * 3800;
-        d.phase = Math.random() * Math.PI * 2;
-        d.stretch = 0.7 + Math.random() * 0.9;
-      } else {
-        bleedDrops.splice(i, 1);
-      }
+      bleedDrops.splice(i, 1);
       continue;
     }
     d.vx += Math.sin(now * 0.0022 + d.phase) * 0.00000035;
     d.vy += 0.00000012;
     d.x += d.vx * 16;
     d.y += d.vy * 16;
-    d.x += (ox - d.x) * 0.004;
-    d.y += (oy + 0.02 - d.y) * 0.0025;
+    d.x += (box - d.x) * 0.004;
+    d.y += (boy + 0.02 - d.y) * 0.0025;
     d.stretch = 0.7 + Math.min(1.8, d.vy * 90000);
-  }
-
-  if (
-    fadeIn > 0.5 &&
-    fadeOut > 0.4 &&
-    bleedDrops.length < 14 &&
-    Math.random() < 0.035
-  ) {
-    bleedDrops.push({
-      x: ox + (Math.random() - 0.5) * 0.035,
-      y: oy + (Math.random() - 0.4) * 0.025,
-      vx: (Math.random() - 0.5) * 0.00001,
-      vy: 0.000006 + Math.random() * 0.000012,
-      r: 0.004 + Math.random() * 0.008,
-      born: now,
-      life: 1800 + Math.random() * 2800,
-      phase: Math.random() * Math.PI * 2,
-      stretch: 0.8 + Math.random() * 0.6,
-    });
   }
 }
 
@@ -820,34 +821,102 @@ function drawOberneulandBleed(
   }
 }
 
-function drawSilhouettePath(target: CanvasRenderingContext2D, now: number) {
-  if (!silhouette || silhouette.alpha < 0.008) return;
-  const s = silhouette;
-  if (BREMEN_OUTLINE.length < 3) return;
-
+function drawSilhouetteLayer(
+  target: CanvasRenderingContext2D,
+  now: number,
+  s: Silhouette,
+  ox: number,
+  oy: number,
+  fill: string,
+  stroke: string,
+  withBlood: boolean,
+) {
   target.save();
-  target.translate(s.x, s.y);
-  target.rotate(s.rot);
-  target.transform(1, 0, s.skew, 1, 0, 0);
+  target.translate(s.x + ox, s.y + oy);
+  target.rotate(s.rot + s.gskew * 0.3);
+  target.transform(1, 0, s.skew + s.gskew, 1, 0, 0);
   target.translate(-s.scale * 0.5, -s.scale * 0.52);
   target.scale(s.scale, s.scale * 0.82);
 
+  if (s.tear < 99) {
+    // Horizontal tape tear — only a band of the map survives this frame
+    const top = (100 - s.tear) / 100;
+    target.beginPath();
+    target.rect(-0.15, top, 1.3, Math.max(0.08, s.tear / 100));
+    target.clip();
+  }
+
   traceBremenPath(target);
-  const a = s.alpha;
-  target.fillStyle = `rgba(140, 148, 145, ${a * 0.35})`;
+  target.fillStyle = fill;
   target.fill();
-  target.strokeStyle = `rgba(175, 182, 178, ${a})`;
+  target.strokeStyle = stroke;
   target.lineWidth = Math.max(1.25 / s.scale, 0.004);
   target.lineJoin = "round";
   target.stroke();
 
-  // Blood seeps under Oberneuland — clipped so it stays inside Bremen
+  if (withBlood) {
+    target.save();
+    traceBremenPath(target);
+    target.clip();
+    drawOberneulandBleed(target, now, s.alpha);
+    target.restore();
+  }
+  target.restore();
+}
+
+function drawSilhouettePath(target: CanvasRenderingContext2D, now: number) {
+  if (!silhouette || silhouette.alpha < 0.01) return;
+  const s = silhouette;
+  if (BREMEN_OUTLINE.length < 3) return;
+
+  const a = s.alpha;
+
+  // RGB channel split ghosts — same language as the letter glitch
+  if (s.hard) {
+    drawSilhouetteLayer(
+      target,
+      now,
+      s,
+      s.gx * 0.55,
+      s.gy * 0.2,
+      `rgba(255, 48, 72, ${a * 0.28})`,
+      `rgba(255, 48, 72, ${a * 0.45})`,
+      false,
+    );
+    drawSilhouetteLayer(
+      target,
+      now,
+      s,
+      -s.gx * 0.55,
+      -s.gy * 0.15,
+      `rgba(48, 210, 255, ${a * 0.22})`,
+      `rgba(48, 210, 255, ${a * 0.4})`,
+      false,
+    );
+  }
+
   target.save();
-  traceBremenPath(target);
-  target.clip();
-  drawOberneulandBleed(target, now, s.alpha);
+  if (s.hard) {
+    target.filter = `contrast(${1.15 + a}) brightness(${0.85 + a * 0.5}) saturate(${1.3 + a})`;
+  }
+  drawSilhouetteLayer(
+    target,
+    now,
+    s,
+    s.gx * 0.2,
+    s.gy * 0.15,
+    `rgba(140, 148, 145, ${a * 0.4})`,
+    `rgba(190, 198, 194, ${a * 1.15})`,
+    true,
+  );
   target.restore();
-  target.restore();
+
+  // Scanline / noise slice across the flash
+  if (s.hard && a > 0.08) {
+    const y = s.y + Math.sin(now * 0.04 + s.seed) * s.scale * 0.35;
+    target.fillStyle = `rgba(220, 230, 225, ${a * 0.12})`;
+    target.fillRect(s.x - s.scale * 0.55, y, s.scale * 1.1, 1.2);
+  }
 }
 
 function drawOverlays(now: number) {
