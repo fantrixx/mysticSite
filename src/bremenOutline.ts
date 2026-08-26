@@ -73,3 +73,6 @@ export const BREMEN_OUTLINE: [number, number][] = [
   [0.07, 0.002],
   [0, 0.011],
 ];
+
+/** Approx. center of Stadtteil Oberneuland in the same normalized space. */
+export const BREMEN_OBERNEULAND: [number, number] = [0.87, 0.58];

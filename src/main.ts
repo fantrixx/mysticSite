@@ -1,5 +1,5 @@
 import "./style.css";
-import { BREMEN_OUTLINE } from "./bremenOutline";
+import { BREMEN_OBERNEULAND, BREMEN_OUTLINE } from "./bremenOutline";
 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <div class="scene" aria-hidden="true">
@@ -69,6 +69,7 @@ const ctx = canvas.getContext("2d")!;
 const watchCanvas = document.querySelector<HTMLCanvasElement>("#watch")!;
 const watchCtx = watchCanvas.getContext("2d")!;
 const mark = document.querySelector<HTMLHeadingElement>("#mark")!;
+const brandStack = document.querySelector<HTMLDivElement>(".brand-stack")!;
 const ambientToggle = document.querySelector<HTMLButtonElement>("#ambient-toggle")!;
 
 const TRUE_WORD = "fantrixx";
@@ -149,6 +150,7 @@ type Silhouette = {
 };
 
 let silhouette: Silhouette | null = null;
+let firstSilhouetteDone = false;
 let eyes: Eyes | null = null;
 const fireflies: Firefly[] = [];
 
@@ -186,7 +188,17 @@ function scheduleNextFirefly(now: number) {
 }
 
 function scheduleNextSilhouette(now: number) {
-  nextSilhouetteAt = now + 6000 + Math.random() * 12000;
+  // Ongoing rhythm — a bit more present than the ultra-rare stretch
+  nextSilhouetteAt = now + 16000 + Math.random() * 28000;
+}
+
+function scheduleFirstSilhouette(now: number) {
+  // Guarantee one sighting within the first ~10s of the page
+  const latest = 10000;
+  const earliest = Math.min(now + 800, latest - 500);
+  const lo = Math.max(earliest, now + 600);
+  const hi = Math.max(lo + 200, latest);
+  nextSilhouetteAt = lo + Math.random() * (hi - lo);
 }
 
 function triggerGlitchBurst(now: number) {
@@ -368,15 +380,117 @@ function updateFireflies(now: number) {
   }
 }
 
+function silhouetteOverlapsBrand(
+  x: number,
+  y: number,
+  scale: number,
+  rot: number,
+): boolean {
+  const avoid = brandStack.getBoundingClientRect();
+  const pad = 36;
+  const avoidL = avoid.left - pad;
+  const avoidR = avoid.right + pad;
+  const avoidT = avoid.top - pad;
+  const avoidB = avoid.bottom + pad;
+
+  // Conservative AABB covering the rotated/skewed outline
+  const halfW = scale * 0.58;
+  const halfH = scale * 0.5;
+  const cos = Math.abs(Math.cos(rot));
+  const sin = Math.abs(Math.sin(rot));
+  const extX = halfW * cos + halfH * sin;
+  const extY = halfW * sin + halfH * cos;
+  const left = x - extX;
+  const right = x + extX;
+  const top = y - extY;
+  const bottom = y + extY;
+
+  return !(right < avoidL || left > avoidR || bottom < avoidT || top > avoidB);
+}
+
 function spawnSilhouette(now: number) {
   const size = Math.min(width, height);
-  const scale = size * (0.32 + Math.random() * 0.28);
+  const rot = (Math.random() - 0.5) * 0.35;
+  const skew = (Math.random() - 0.5) * 0.1;
+
+  // Prefer edge / corner zones so the map never sits under type or GitHub
+  const zones: Array<() => { x: number; y: number; scale: number }> = [
+    () => {
+      const scale = size * (0.22 + Math.random() * 0.16);
+      return {
+        scale,
+        x: scale * 0.55 + Math.random() * width * 0.22,
+        y: scale * 0.45 + Math.random() * height * 0.22,
+      };
+    },
+    () => {
+      const scale = size * (0.22 + Math.random() * 0.16);
+      return {
+        scale,
+        x: width - scale * 0.55 - Math.random() * width * 0.22,
+        y: scale * 0.45 + Math.random() * height * 0.22,
+      };
+    },
+    () => {
+      const scale = size * (0.22 + Math.random() * 0.16);
+      return {
+        scale,
+        x: scale * 0.55 + Math.random() * width * 0.22,
+        y: height - scale * 0.45 - Math.random() * height * 0.22,
+      };
+    },
+    () => {
+      const scale = size * (0.22 + Math.random() * 0.16);
+      return {
+        scale,
+        x: width - scale * 0.55 - Math.random() * width * 0.22,
+        y: height - scale * 0.45 - Math.random() * height * 0.22,
+      };
+    },
+  ];
+
+  let x = width * 0.18;
+  let y = height * 0.18;
+  let scale = size * 0.24;
+  let placed = false;
+
+  for (let attempt = 0; attempt < 28; attempt++) {
+    const pick = zones[attempt % zones.length]();
+    x = pick.x;
+    y = pick.y;
+    scale = pick.scale;
+    if (!silhouetteOverlapsBrand(x, y, scale, rot)) {
+      placed = true;
+      break;
+    }
+  }
+
+  if (!placed) {
+    // Last resort: shrink into the furthest corner from the brand
+    const avoid = brandStack.getBoundingClientRect();
+    const bx = avoid.left + avoid.width * 0.5;
+    const by = avoid.top + avoid.height * 0.5;
+    scale = size * 0.2;
+    const corners = [
+      { x: scale * 0.55, y: scale * 0.45 },
+      { x: width - scale * 0.55, y: scale * 0.45 },
+      { x: scale * 0.55, y: height - scale * 0.45 },
+      { x: width - scale * 0.55, y: height - scale * 0.45 },
+    ];
+    corners.sort(
+      (a, b) =>
+        Math.hypot(b.x - bx, b.y - by) - Math.hypot(a.x - bx, a.y - by),
+    );
+    x = corners[0].x;
+    y = corners[0].y;
+  }
+
   silhouette = {
-    x: width * (0.18 + Math.random() * 0.64),
-    y: height * (0.22 + Math.random() * 0.56),
+    x,
+    y,
     scale,
-    rot: (Math.random() - 0.5) * 0.4,
-    skew: (Math.random() - 0.5) * 0.12,
+    rot,
+    skew,
     born: now,
     life: 7000 + Math.random() * 6000,
     alpha: 0,
@@ -397,11 +511,77 @@ function updateSilhouette(now: number) {
   s.alpha = fadeIn * fadeOut * (0.11 + Math.sin(now * 0.0008) * 0.02);
 }
 
-function drawSilhouettePath(target: CanvasRenderingContext2D) {
+function traceBremenPath(target: CanvasRenderingContext2D) {
+  const pts = BREMEN_OUTLINE;
+  target.beginPath();
+  target.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) {
+    target.lineTo(pts[i][0], pts[i][1]);
+  }
+  target.closePath();
+}
+
+function drawOberneulandBleed(
+  target: CanvasRenderingContext2D,
+  now: number,
+  silhouetteAlpha: number,
+) {
+  // Keep blood readable even while the gray outline stays faint
+  const a = Math.min(0.82, 0.42 + silhouetteAlpha * 2.8);
+  const [ox, oy] = BREMEN_OBERNEULAND;
+  const t = now * 0.001;
+  const pulse =
+    0.6 +
+    Math.sin(now * 0.0042) * 0.22 +
+    Math.sin(now * 0.0095 + 1.2) * 0.14;
+  // District-scale blot — Oberneuland is a real Stadtteil, not a pinpoint
+  const rx = 0.07 + pulse * 0.025;
+  const ry = 0.055 + pulse * 0.02;
+
+  // Deep hematoma under the surface
+  const pool = target.createRadialGradient(ox, oy, 0, ox, oy, Math.max(rx, ry) * 1.35);
+  pool.addColorStop(0, `rgba(150, 10, 22, ${0.95 * a})`);
+  pool.addColorStop(0.28, `rgba(110, 4, 14, ${0.78 * a})`);
+  pool.addColorStop(0.55, `rgba(70, 0, 8, ${0.45 * a})`);
+  pool.addColorStop(0.82, `rgba(40, 0, 4, ${0.18 * a})`);
+  pool.addColorStop(1, "rgba(0, 0, 0, 0)");
+  target.fillStyle = pool;
+  target.beginPath();
+  target.ellipse(ox, oy + 0.01, rx, ry, 0.25, 0, Math.PI * 2);
+  target.fill();
+
+  // Seeping veins / under-run fingers
+  for (let i = 0; i < 7; i++) {
+    const ang = -0.9 + i * 0.42 + Math.sin(now * 0.002 + i * 1.7) * 0.2;
+    const len = 0.04 + pulse * 0.04 + (i % 3) * 0.012;
+    const ex = ox + Math.cos(ang) * len;
+    const ey = oy + 0.015 + Math.sin(ang) * len * 0.75 + Math.sin(t * 1.4 + i) * 0.01;
+    const drip = target.createRadialGradient(ex, ey, 0, ex, ey, 0.028 + pulse * 0.012);
+    drip.addColorStop(0, `rgba(170, 16, 28, ${0.85 * a})`);
+    drip.addColorStop(0.45, `rgba(95, 4, 12, ${0.4 * a})`);
+    drip.addColorStop(1, "rgba(0, 0, 0, 0)");
+    target.fillStyle = drip;
+    target.beginPath();
+    target.arc(ex, ey, 0.03, 0, Math.PI * 2);
+    target.fill();
+  }
+
+  // Wet pulse — blood rising under the skin of the map
+  const sheen = 0.25 + Math.max(0, Math.sin(now * 0.007 + t)) * 0.55;
+  const wet = target.createRadialGradient(ox - 0.01, oy - 0.008, 0, ox, oy, rx * 0.55);
+  wet.addColorStop(0, `rgba(200, 35, 48, ${sheen * a * 0.7})`);
+  wet.addColorStop(0.55, `rgba(130, 12, 22, ${sheen * a * 0.25})`);
+  wet.addColorStop(1, "rgba(0, 0, 0, 0)");
+  target.fillStyle = wet;
+  target.beginPath();
+  target.ellipse(ox - 0.006, oy - 0.004, rx * 0.45, ry * 0.35, -0.35, 0, Math.PI * 2);
+  target.fill();
+}
+
+function drawSilhouettePath(target: CanvasRenderingContext2D, now: number) {
   if (!silhouette || silhouette.alpha < 0.008) return;
   const s = silhouette;
-  const pts = BREMEN_OUTLINE;
-  if (pts.length < 3) return;
+  if (BREMEN_OUTLINE.length < 3) return;
 
   target.save();
   target.translate(s.x, s.y);
@@ -410,28 +590,28 @@ function drawSilhouettePath(target: CanvasRenderingContext2D) {
   target.translate(-s.scale * 0.5, -s.scale * 0.52);
   target.scale(s.scale, s.scale * 0.82);
 
-  target.beginPath();
-  target.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length; i++) {
-    target.lineTo(pts[i][0], pts[i][1]);
-  }
-  target.closePath();
-
+  traceBremenPath(target);
   const a = s.alpha;
   target.fillStyle = `rgba(140, 148, 145, ${a * 0.35})`;
   target.fill();
-  // Hairline outline carries most of the recognition
   target.strokeStyle = `rgba(175, 182, 178, ${a})`;
   target.lineWidth = Math.max(1.25 / s.scale, 0.004);
   target.lineJoin = "round";
   target.stroke();
+
+  // Blood seeps under Oberneuland — clipped so it stays inside Bremen
+  target.save();
+  traceBremenPath(target);
+  target.clip();
+  drawOberneulandBleed(target, now, s.alpha);
+  target.restore();
   target.restore();
 }
 
 function drawOverlays(now: number) {
   watchCtx.clearRect(0, 0, width, height);
 
-  drawSilhouettePath(watchCtx);
+  drawSilhouettePath(watchCtx, now);
 
   watchCtx.save();
   watchCtx.globalCompositeOperation = "lighter";
@@ -634,9 +814,16 @@ function updateFloat(now: number) {
       scheduleNextFirefly(now);
     }
 
-    if (nextSilhouetteAt === 0) scheduleNextSilhouette(now + 1200);
+    if (nextSilhouetteAt === 0) scheduleFirstSilhouette(now);
     if (now >= nextSilhouetteAt) {
-      if (!silhouette) spawnSilhouette(now);
+      if (!silhouette) {
+        if (!firstSilhouetteDone) {
+          spawnSilhouette(now);
+          firstSilhouetteDone = true;
+        } else if (Math.random() < 0.7) {
+          spawnSilhouette(now);
+        }
+      }
       scheduleNextSilhouette(now);
     }
   }
