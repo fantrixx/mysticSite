@@ -156,8 +156,7 @@ let masterGain: GainNode | null = null;
 let ambientOn = false;
 
 function scheduleNextGlitch(now: number) {
-  // Sparse — long quiet stretches between almost-missable bursts
-  nextGlitchAt = now + 5000 + Math.random() * 14000;
+  nextGlitchAt = now + 1500 + Math.random() * 4500;
 }
 
 function scheduleNextFalse(now: number) {
@@ -533,10 +532,9 @@ ambientToggle.addEventListener("click", () => {
 
 function updateFloat(now: number) {
   if (floating) {
-    if (nextGlitchAt === 0) scheduleNextGlitch(now + 2500);
+    if (nextGlitchAt === 0) scheduleNextGlitch(now + 800);
     if (now >= nextGlitchAt) {
-      // Sometimes skip a scheduled slot entirely — keeps doubt alive
-      if (Math.random() < 0.72) triggerGlitchBurst(now);
+      if (Math.random() < 0.9) triggerGlitchBurst(now);
       scheduleNextGlitch(now);
     }
 

@@ -23,7 +23,6 @@ body {
   color: var(--bone);
   font-family: "Cormorant Garamond", Georgia, serif;
   -webkit-font-smoothing: antialiased;
-  cursor: crosshair;
 }
 
 #app {
