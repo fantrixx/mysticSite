@@ -12,7 +12,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       <h1 id="mark" aria-label="fantrixx"></h1>
       <div class="brand-links">
         <a
-          class="github"
+          class="brand-link"
           href="https://github.com/fantrixx"
           target="_blank"
           rel="noopener noreferrer"
@@ -25,21 +25,20 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
             />
           </svg>
         </a>
-        <button
-          type="button"
-          class="ambient-toggle"
-          id="ambient-toggle"
-          aria-pressed="false"
-          aria-label="Ambient sound"
-          title="Ambient"
+        <a
+          class="brand-link"
+          href="https://steamcommunity.com/profiles/76561197961133854/"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Steam"
         >
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path
               fill="currentColor"
-              d="M4 9v6h3l5 4V5L7 9H4zm11.5 3c0-1.77-1-3.29-2.5-4.03v8.05c1.5-.74 2.5-2.26 2.5-4.02z"
+              d="M11.979 0C5.678 0 .511 4.86.022 11.037l4.412 1.815c.552-.312 1.187-.5 1.87-.5.176 0 .352.016.523.04l2.2-3.274v-.043c0-2.465 2.01-4.475 4.475-4.475 2.466 0 4.476 2.01 4.476 4.475 0 2.465-2.01 4.476-4.476 4.476h-.085l-3.151 2.242c0 .146.015.293.015.441 0 2.02-1.646 3.667-3.667 3.667-1.76 0-3.268-1.25-3.603-2.932L.263 16.12C1.81 21.443 6.455 25.5 11.979 25.5c6.988 0 12.646-5.658 12.646-12.647C24.625 5.658 18.967 0 11.979 0ZM7.54 18.91l-1.045.43 1.065 4.392c.501.226 1.046.35 1.618.35 1.636 0 2.97-1.17 3.27-2.71.04-.21.06-.425.06-.645 0-.105-.005-.21-.015-.312l-3.25-1.34c-.55.82-1.48 1.36-2.545 1.36-.055 0-.11 0-.163-.005Zm11.415-7.93c0-1.617-1.317-2.934-2.934-2.934-1.617 0-2.934 1.317-2.934 2.934s1.317 2.934 2.934 2.934c1.617 0 2.934-1.317 2.934-2.934Zm-2.934-1.94c1.07 0 1.94.87 1.94 1.94s-.87 1.94-1.94 1.94-1.94-.87-1.94-1.94.87-1.94 1.94-1.94Z"
             />
           </svg>
-        </button>
+        </a>
       </div>
     </div>
   </main>
@@ -68,7 +67,6 @@ const ctx = canvas.getContext("2d")!;
 const watchCanvas = document.querySelector<HTMLCanvasElement>("#watch")!;
 const watchCtx = watchCanvas.getContext("2d")!;
 const mark = document.querySelector<HTMLHeadingElement>("#mark")!;
-const ambientToggle = document.querySelector<HTMLButtonElement>("#ambient-toggle")!;
 
 const TRUE_WORD = "fantrixx";
 const FALSE_CHARS = ["1", "0", "l", "/", "x", "z", "·", "ı"];
@@ -149,11 +147,6 @@ let prevX = -9999;
 let prevY = -9999;
 let pointerActive = false;
 let lastSpawn = 0;
-
-// Optional ambient — silent until the user enables it
-let audioCtx: AudioContext | null = null;
-let masterGain: GainNode | null = null;
-let ambientOn = false;
 
 function scheduleNextGlitch(now: number) {
   nextGlitchAt = now + 1500 + Math.random() * 4500;
@@ -410,82 +403,6 @@ function drawOverlays(now: number) {
   watchCtx.restore();
 }
 
-async function ensureAmbient() {
-  if (audioCtx) return;
-  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  audioCtx = new Ctx();
-  masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0;
-  masterGain.connect(audioCtx.destination);
-
-  // Deep sub drone
-  const oscA = audioCtx.createOscillator();
-  oscA.type = "sine";
-  oscA.frequency.value = 42;
-  const oscB = audioCtx.createOscillator();
-  oscB.type = "sine";
-  oscB.frequency.value = 63.5;
-  const droneGain = audioCtx.createGain();
-  droneGain.gain.value = 0.22;
-  oscA.connect(droneGain);
-  oscB.connect(droneGain);
-
-  // Soft filtered noise (wind / void)
-  const bufferSize = audioCtx.sampleRate * 2;
-  const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-  const data = noiseBuffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-  const noise = audioCtx.createBufferSource();
-  noise.buffer = noiseBuffer;
-  noise.loop = true;
-  const noiseFilter = audioCtx.createBiquadFilter();
-  noiseFilter.type = "lowpass";
-  noiseFilter.frequency.value = 280;
-  noiseFilter.Q.value = 0.5;
-  const noiseGain = audioCtx.createGain();
-  noiseGain.gain.value = 0.035;
-  noise.connect(noiseFilter);
-  noiseFilter.connect(noiseGain);
-
-  // Occasional very sparse pulse via LFO on a quiet high partial
-  const pulse = audioCtx.createOscillator();
-  pulse.type = "sine";
-  pulse.frequency.value = 110;
-  const pulseGain = audioCtx.createGain();
-  pulseGain.gain.value = 0;
-  const lfo = audioCtx.createOscillator();
-  lfo.type = "sine";
-  lfo.frequency.value = 0.07;
-  const lfoGain = audioCtx.createGain();
-  lfoGain.gain.value = 0.012;
-  lfo.connect(lfoGain);
-  lfoGain.connect(pulseGain.gain);
-  pulse.connect(pulseGain);
-
-  droneGain.connect(masterGain);
-  noiseGain.connect(masterGain);
-  pulseGain.connect(masterGain);
-
-  oscA.start();
-  oscB.start();
-  noise.start();
-  pulse.start();
-  lfo.start();
-}
-
-async function setAmbient(on: boolean) {
-  await ensureAmbient();
-  if (!audioCtx || !masterGain) return;
-  if (audioCtx.state === "suspended") await audioCtx.resume();
-  ambientOn = on;
-  const now = audioCtx.currentTime;
-  masterGain.gain.cancelScheduledValues(now);
-  masterGain.gain.setValueAtTime(masterGain.gain.value, now);
-  masterGain.gain.linearRampToValueAtTime(on ? 0.09 : 0, now + (on ? 2.4 : 1.2));
-  ambientToggle.setAttribute("aria-pressed", on ? "true" : "false");
-  ambientToggle.classList.toggle("is-on", on);
-}
-
 function updateGlitch(m: LetterMotion, now: number, baseOpacity: number) {
   if (now >= m.glitchUntil) {
     clearGlitch(m);
@@ -525,10 +442,6 @@ function updateGlitch(m: LetterMotion, now: number, baseOpacity: number) {
     opacity,
   };
 }
-
-ambientToggle.addEventListener("click", () => {
-  void setAmbient(!ambientOn);
-});
 
 function updateFloat(now: number) {
   if (floating) {
